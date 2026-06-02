@@ -4,12 +4,10 @@ import { auth, signIn } from "@/lib/auth";
 import { PREVIEW } from "@/lib/preview";
 
 const ERRORS: Record<string, string> = {
-  AccessDenied:
-    "このメールアドレスではログインできません。@instyle.group の管理者アカウントが必要です。心当たりがあれば admin に追加を依頼してください。",
-  Verification:
-    "リンクの有効期限が切れているか、すでに使用されています。もう一度メールアドレスを入力してマジックリンクを送り直してください。",
+  WrongPassword: "パスワードが違います。",
+  CredentialsSignin: "パスワードが違います。",
   Configuration:
-    "サーバ側の設定を読み込めませんでした。ConoHa の /var/www/_shared/apps/app-claude-team-usage.env と Vercel の env を確認してください。",
+    "サーバ側の設定を読み込めませんでした。/var/www/_shared/apps/app-claude-team-usage.env の ADMIN_PASSWORD_HASH と AUTH_SECRET を確認してください。",
 };
 
 export default async function LoginPage(props: {
@@ -20,43 +18,40 @@ export default async function LoginPage(props: {
   if (session?.user) redirect("/");
 
   const { error, from } = await props.searchParams;
-  const errorMsg = error ? ERRORS[error] ?? ERRORS.Configuration : null;
+  const errorMsg = error ? (ERRORS[error] ?? ERRORS.Configuration) : null;
 
   return (
     <div className="login-card glass-panel">
       <h1 className="login-title">Claude Team Usage</h1>
-      <p className="login-sub">
-        instyle group の管理者のみログインできます。メールアドレスを入力すると、
-        マジックリンクが届きます。
-      </p>
+      <p className="login-sub">instyle group 管理者用ダッシュボード。共通パスワードでログインしてください。</p>
 
       {errorMsg ? <p className="login-error">{errorMsg}</p> : null}
 
       <form
         action={async (formData: FormData) => {
           "use server";
-          const email = String(formData.get("email") ?? "").trim();
-          if (!email) return;
-          await signIn("resend", {
-            email,
+          const password = String(formData.get("password") ?? "");
+          if (!password) return;
+          await signIn("credentials", {
+            password,
             redirectTo: from || "/",
           });
         }}
       >
         <div className="field">
-          <label htmlFor="email">メールアドレス</label>
+          <label htmlFor="password">パスワード</label>
           <input
             className="input"
-            id="email"
-            name="email"
-            type="email"
-            placeholder="you@instyle.group"
+            id="password"
+            name="password"
+            type="password"
             required
-            autoComplete="email"
+            autoComplete="current-password"
+            autoFocus
           />
         </div>
         <button className="btn btn--primary" type="submit" style={{ width: "100%" }}>
-          マジックリンクを送る
+          ログイン
         </button>
       </form>
     </div>

@@ -1,15 +1,9 @@
-const RAW = process.env.ADMIN_EMAILS ?? "";
+// Kept as a vestigial helper for compatibility — the project switched from
+// email allowlist to a shared admin password. Always returns false so any
+// remaining caller short-circuits to "non-admin" if reached.
+export const ADMIN_EMAILS: ReadonlySet<string> = new Set();
+export const ADMIN_EMAIL_LIST: readonly string[] = [];
 
-const parsed = RAW.split(",")
-  .map((s) => s.trim().toLowerCase())
-  .filter((s) => s.length > 0);
-
-export const ADMIN_EMAILS: ReadonlySet<string> = new Set(parsed);
-export const ADMIN_EMAIL_LIST: readonly string[] = parsed;
-
-export function isAdminEmail(email: string | null | undefined): boolean {
-  if (!email) return false;
-  const e = email.toLowerCase();
-  if (!e.endsWith("@instyle.group")) return false;
-  return ADMIN_EMAILS.has(e);
+export function isAdminEmail(_email: string | null | undefined): boolean {
+  return false;
 }

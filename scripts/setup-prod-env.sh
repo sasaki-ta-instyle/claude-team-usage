@@ -29,17 +29,29 @@ echo
 read -r -p "DATABASE_URL (Neon Postgres, postgres://... sslmode=require): " DATABASE_URL
 read -r -p "ANTHROPIC_ADMIN_API_KEY (sk-ant-admin01-...): " ANTHROPIC_ADMIN_API_KEY
 read -r -p "ANTHROPIC_ORG_ID (optional, leave blank to skip): " ANTHROPIC_ORG_ID
-read -r -p "AUTH_RESEND_KEY (re_...): " AUTH_RESEND_KEY
-read -r -p "EMAIL_FROM (default: instyle group <noreply@instyle.group>): " EMAIL_FROM
-EMAIL_FROM="${EMAIL_FROM:-instyle group <noreply@instyle.group>}"
 
-read -r -p "ADMIN_EMAILS (comma-separated, must end with @instyle.group): " ADMIN_EMAILS
+read -r -s -p "ADMIN_PASSWORD (共通パスワード、画面に表示されません): " ADMIN_PASSWORD
+echo
+read -r -s -p "ADMIN_PASSWORD (確認のためもう一度): " ADMIN_PASSWORD_CONFIRM
+echo
+if [ "${ADMIN_PASSWORD}" != "${ADMIN_PASSWORD_CONFIRM}" ]; then
+  echo "パスワードが一致しません" >&2; exit 1
+fi
+if [ ${#ADMIN_PASSWORD} -lt 12 ]; then
+  echo "パスワードは 12 文字以上推奨です" >&2; exit 1
+fi
+
 read -r -p "JPY_PER_USD (default: 155): " JPY_PER_USD
 JPY_PER_USD="${JPY_PER_USD:-155}"
 
 # Auto-generated secrets
 AUTH_SECRET="$(openssl rand -base64 48 | tr -d '\n')"
 SYNC_TOKEN="$(openssl rand -hex 32)"
+
+# bcrypt hash の `$` を `\$` にエスケープして env 経由でも壊れないように。
+# Next.js の dotenv-expand が $2a を変数展開して hash を破壊する既知の落とし穴。
+RAW_HASH="$(node -e "process.stdout.write(require('bcryptjs').hashSync(process.argv[1], 12))" "${ADMIN_PASSWORD}")"
+ESCAPED_HASH="${RAW_HASH//\$/\\$}"
 
 tmp="$(mktemp -t claude-team-usage-env.XXXXXX)"
 trap 'rm -f "$tmp"' EXIT
@@ -49,9 +61,7 @@ trap 'rm -f "$tmp"' EXIT
   echo "AUTH_SECRET=${AUTH_SECRET}"
   echo "AUTH_URL=${AUTH_BASE_URL}"
   echo "AUTH_TRUST_HOST=true"
-  echo "AUTH_RESEND_KEY=${AUTH_RESEND_KEY}"
-  echo "EMAIL_FROM=${EMAIL_FROM}"
-  echo "ADMIN_EMAILS=${ADMIN_EMAILS}"
+  echo "ADMIN_PASSWORD_HASH=${ESCAPED_HASH}"
   echo "ANTHROPIC_ADMIN_API_KEY=${ANTHROPIC_ADMIN_API_KEY}"
   [ -n "${ANTHROPIC_ORG_ID}" ] && echo "ANTHROPIC_ORG_ID=${ANTHROPIC_ORG_ID}"
   echo "SYNC_TOKEN=${SYNC_TOKEN}"
@@ -65,6 +75,7 @@ ssh "${SERVER_HOST_ALIAS}" "install -o ${SERVER_USER} -g ${SERVER_USER} -m 600 /
 bold "done"
 echo "  generated AUTH_SECRET (hidden)"
 echo "  generated SYNC_TOKEN  (hidden)"
+echo "  generated ADMIN_PASSWORD_HASH (hidden, \$ escaped for dotenv safety)"
 echo
 echo "  --- crontab 行（env を都度 source して \$SYNC_TOKEN を展開する形）---"
 cat <<EOF
@@ -74,5 +85,6 @@ cat <<EOF
 EOF
 echo "  ssh conoha-deploy 'crontab -e' で上記行を追加（インデント無しで）"
 echo
-echo "  SYNC_TOKEN を後で参照する場合（値は出さない、存在確認のみ）:"
+echo "  値の存在だけ確認したい場合（中身は出さない）:"
 echo "    ssh ${SERVER_HOST_ALIAS} 'grep -c ^SYNC_TOKEN= ${REMOTE_ENV}'  # → 1 なら OK"
+echo "    ssh ${SERVER_HOST_ALIAS} 'grep -c ^ADMIN_PASSWORD_HASH= ${REMOTE_ENV}'  # → 1 なら OK"

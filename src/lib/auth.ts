@@ -1,28 +1,30 @@
-import { DrizzleAdapter } from "@auth/drizzle-adapter";
-import NextAuth from "next-auth";
-import Resend from "next-auth/providers/resend";
+import bcrypt from "bcryptjs";
+import NextAuth, { CredentialsSignin } from "next-auth";
+import Credentials from "next-auth/providers/credentials";
 
-import { db } from "@/db/client";
-import {
-  accounts,
-  sessions,
-  users,
-  verificationTokens,
-} from "@/db/schema";
 import { authConfig } from "./auth.config";
+
+class WrongPassword extends CredentialsSignin {
+  code = "WrongPassword";
+}
 
 export const { handlers, signIn, signOut, auth } = NextAuth({
   ...authConfig,
-  adapter: DrizzleAdapter(db, {
-    usersTable: users,
-    accountsTable: accounts,
-    sessionsTable: sessions,
-    verificationTokensTable: verificationTokens,
-  }),
   providers: [
-    Resend({
-      apiKey: process.env.AUTH_RESEND_KEY,
-      from: process.env.EMAIL_FROM ?? "noreply@instyle.group",
+    Credentials({
+      name: "Admin Password",
+      credentials: {
+        password: { label: "Password", type: "password" },
+      },
+      async authorize(credentials) {
+        const password = String(credentials?.password ?? "");
+        const hash = process.env.ADMIN_PASSWORD_HASH ?? "";
+        if (!password || !hash) throw new WrongPassword();
+        const ok = await bcrypt.compare(password, hash);
+        if (!ok) throw new WrongPassword();
+        // Single admin identity. id/name are surfaced to the JWT.
+        return { id: "admin", name: "admin" };
+      },
     }),
   ],
 });

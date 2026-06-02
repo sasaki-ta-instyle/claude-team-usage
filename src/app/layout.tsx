@@ -40,9 +40,9 @@ export default async function RootLayout({
 }) {
   const session = PREVIEW ? null : await auth();
   const isLoggedIn = PREVIEW || !!session?.user;
-  const headerEmail = PREVIEW
-    ? "preview@instyle.group (demo)"
-    : (session?.user?.email ?? "");
+  const headerName = PREVIEW
+    ? "admin (demo)"
+    : (session?.user?.name ?? "admin");
 
   return (
     <html lang="ja">
@@ -67,7 +67,7 @@ export default async function RootLayout({
                     PREVIEW
                   </span>
                 ) : null}
-                <span>{headerEmail}</span>
+                <span>{headerName}</span>
                 <form
                   action={async () => {
                     "use server";
