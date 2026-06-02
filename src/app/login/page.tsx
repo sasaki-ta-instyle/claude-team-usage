@@ -1,3 +1,4 @@
+import { AuthError } from "next-auth";
 import { redirect } from "next/navigation";
 
 import { auth, signIn } from "@/lib/auth";
@@ -14,7 +15,10 @@ export default async function LoginPage(props: {
   searchParams: Promise<{ error?: string; from?: string }>;
 }) {
   if (PREVIEW) redirect("/");
-  const session = await auth();
+
+  // 旧 AUTH_SECRET で署名された stale JWT を持つ訪問者が来ても落ちないよう、
+  // session 取得に失敗しても "未ログイン" として続行する。
+  const session = await auth().catch(() => null);
   if (session?.user) redirect("/");
 
   const { error, from } = await props.searchParams;
@@ -23,7 +27,9 @@ export default async function LoginPage(props: {
   return (
     <div className="login-card glass-panel">
       <h1 className="login-title">Claude Team Usage</h1>
-      <p className="login-sub">instyle group 管理者用ダッシュボード。共通パスワードでログインしてください。</p>
+      <p className="login-sub">
+        instyle group 管理者用ダッシュボード。共通パスワードでログインしてください。
+      </p>
 
       {errorMsg ? <p className="login-error">{errorMsg}</p> : null}
 
@@ -32,10 +38,18 @@ export default async function LoginPage(props: {
           "use server";
           const password = String(formData.get("password") ?? "");
           if (!password) return;
-          await signIn("credentials", {
-            password,
-            redirectTo: from || "/",
-          });
+          try {
+            await signIn("credentials", {
+              password,
+              redirectTo: from || "/",
+            });
+          } catch (err) {
+            if (err instanceof AuthError) {
+              redirect(`/login?error=${err.type}`);
+            }
+            // NEXT_REDIRECT などは Next.js に再 throw（redirect が機能するため）
+            throw err;
+          }
         }}
       >
         <div className="field">

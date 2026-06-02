@@ -38,7 +38,9 @@ export default async function RootLayout({
 }: {
   children: React.ReactNode;
 }) {
-  const session = PREVIEW ? null : await auth();
+  // stale JWT (旧 AUTH_SECRET で署名されたクッキー) を持つ訪問者でも落ちないよう
+  // session 取得に失敗したら未ログイン扱いで続行する。
+  const session = PREVIEW ? null : await auth().catch(() => null);
   const isLoggedIn = PREVIEW || !!session?.user;
   const headerName = PREVIEW
     ? "admin (demo)"
