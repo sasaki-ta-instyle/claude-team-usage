@@ -1,5 +1,8 @@
 import Link from "next/link";
+import { redirect } from "next/navigation";
 
+import { auth } from "@/lib/auth";
+import { PREVIEW } from "@/lib/preview";
 import {
   memberSummary,
   PREMIUM_COST_CENTS_DEFAULT,
@@ -14,6 +17,13 @@ import {
 export const dynamic = "force-dynamic";
 
 export default async function DashboardPage() {
+  // basePath root (/claude-team-usage) は middleware の matcher が拾わない
+  // ことがあるので、ページ側でも auth 必須チェックを置く。
+  if (!PREVIEW) {
+    const session = await auth().catch(() => null);
+    if (!session?.user) redirect("/login");
+  }
+
   const fromDate = monthStartIso();
   const toDate = isoDateMinusDays(0);
   const members = await memberSummary({ fromDate, toDate });
