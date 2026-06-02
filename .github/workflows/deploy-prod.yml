@@ -126,11 +126,16 @@ jobs:
         run: |
           set -euo pipefail
           MIGRATE="${MIGRATE_CMD:-pnpm migrate}"
+          # source 形式で env を読む。xargs -d '\n' export だと
+          # EMAIL_FROM のような空白や `<>` を含む値が word-split されて
+          # export 自体が失敗するため。
           ssh -p ${{ secrets.CONOHA_PORT }} ${{ secrets.CONOHA_USER }}@${{ secrets.CONOHA_HOST }} "
             set -euo pipefail
             cd ${DEPLOY_BASE}/releases/${SHA}
-            export \$(grep -v '^#' .env.base 2>/dev/null | xargs -d '\n' || true)
-            export \$(grep -v '^#' .env.app  2>/dev/null | xargs -d '\n' || true)
+            set -a
+            [ -f .env.base ] && . .env.base
+            [ -f .env.app  ] && . .env.app
+            set +a
             ${MIGRATE}
           "
 
