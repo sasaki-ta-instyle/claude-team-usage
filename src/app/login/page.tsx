@@ -38,16 +38,21 @@ export default async function LoginPage(props: {
           "use server";
           const password = String(formData.get("password") ?? "");
           if (!password) return;
+
+          // basePath を含めた絶対 path にする（Auth.js v5 は redirectTo の値を
+          // そのまま使うため、"/" だとサブドメイン直下に飛んでしまう）。
+          const BASE = "/claude-team-usage";
+          const dest = from ? `${BASE}${from.startsWith("/") ? from : `/${from}`}` : `${BASE}/`;
+
           try {
             await signIn("credentials", {
               password,
-              redirectTo: from || "/",
+              redirectTo: dest,
             });
           } catch (err) {
             if (err instanceof AuthError) {
               redirect(`/login?error=${err.type}`);
             }
-            // NEXT_REDIRECT などは Next.js に再 throw（redirect が機能するため）
             throw err;
           }
         }}
