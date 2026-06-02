@@ -21,7 +21,9 @@ const PUBLIC = [
 const PREVIEW = process.env.PREVIEW === "1";
 
 function buildLoginRedirect(req: NextRequest, fromPath: string) {
-  const url = new URL(req.url);
+  // req.nextUrl reflects the external URL via x-forwarded-host. Using new URL(req.url)
+  // would leak the internal http://localhost:3011 origin into the Location header.
+  const url = req.nextUrl.clone();
   url.pathname = `${BASE_PATH}/login`;
   url.search = "";
   url.searchParams.set("from", fromPath);
