@@ -10,7 +10,7 @@
     "typecheck": "tsc --noEmit",
     "db:generate": "drizzle-kit generate",
     "db:push": "drizzle-kit push",
-    "migrate": "tsx scripts/migrate.ts"
+    "migrate": "node scripts/migrate.mjs"
   },
   "dependencies": {
     "bcryptjs": "^3.0.3",

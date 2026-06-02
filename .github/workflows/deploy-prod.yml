@@ -68,6 +68,12 @@ jobs:
           mkdir -p _deploy/.next
           cp -r .next/static _deploy/.next/static
           if [ -d public ]; then cp -r public _deploy/public; fi
+          # Migration assets must travel with the standalone build because
+          # standalone only ships Next.js runtime deps + traced node_modules.
+          # scripts/migrate.mjs uses drizzle-orm + pg (already in node_modules
+          # because the app imports them), and drizzle/ contains the SQL files.
+          if [ -d scripts ]; then cp -r scripts _deploy/scripts; fi
+          if [ -d drizzle ]; then cp -r drizzle _deploy/drizzle; fi
 
       - name: Setup SSH
         run: |
