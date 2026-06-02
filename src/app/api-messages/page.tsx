@@ -14,7 +14,7 @@ export default async function ApiMessagesPage(props: {
 
   return (
     <>
-      <h1 className="page-title">API Messages（Workbench / 直 API）</h1>
+      <h1 className="page-title">API Messages</h1>
       <p className="page-subtitle">
         期間: <strong>{fromDate}</strong> – <strong>{toDate}</strong>。
         Claude Code とは別系統。account × workspace × api_key × model 単位で集計。
