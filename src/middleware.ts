@@ -21,13 +21,20 @@ const PUBLIC = [
 const PREVIEW = process.env.PREVIEW === "1";
 
 function buildLoginRedirect(req: NextRequest, fromPath: string) {
-  // req.nextUrl reflects the external URL via x-forwarded-host. Using new URL(req.url)
-  // would leak the internal http://localhost:3011 origin into the Location header.
-  const url = req.nextUrl.clone();
-  url.pathname = `${BASE_PATH}/login`;
-  url.search = "";
-  url.searchParams.set("from", fromPath);
-  return NextResponse.redirect(url);
+  // Build the public-facing URL from forwarded headers. req.nextUrl is
+  // unreliable behind nginx (host comes through as 127.0.0.1:3011) and
+  // setting `${BASE_PATH}/login` on it double-prefixes basePath. We
+  // construct an absolute URL ourselves with the public host.
+  const proto =
+    req.headers.get("x-forwarded-proto") ??
+    (req.nextUrl.protocol.replace(":", "") || "https");
+  const host =
+    req.headers.get("x-forwarded-host") ??
+    req.headers.get("host") ??
+    req.nextUrl.host;
+  const target = new URL(`${proto}://${host}${BASE_PATH}/login`);
+  target.searchParams.set("from", fromPath);
+  return NextResponse.redirect(target);
 }
 
 function clearStaleSession(res: NextResponse) {
