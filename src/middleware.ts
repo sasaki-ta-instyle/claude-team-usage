@@ -1,12 +1,6 @@
-import NextAuth from "next-auth";
-import { NextResponse } from "next/server";
+import { NextResponse, type NextRequest } from "next/server";
+import { getToken } from "next-auth/jwt";
 
-import { authConfig } from "@/lib/auth.config";
-
-const { auth } = NextAuth(authConfig);
-
-// Next.js 15 middleware では req.nextUrl.pathname が basePath 込みで来るため
-// 明示的にストリップしてからマッチングする。
 const BASE_PATH = "/claude-team-usage";
 
 function stripBase(pathname: string): string {
@@ -26,22 +20,54 @@ const PUBLIC = [
 
 const PREVIEW = process.env.PREVIEW === "1";
 
-export default auth((req) => {
-  if (PREVIEW) return NextResponse.next();
-
-  const path = stripBase(req.nextUrl.pathname);
-  if (PUBLIC.some((re) => re.test(path))) return;
-
-  const user = req.auth?.user as { isAdmin?: boolean } | undefined;
-  if (user?.isAdmin) return;
-
-  // Redirect to login. basePath を含めた絶対 URL を組み立てる。
+function buildLoginRedirect(req: NextRequest, fromPath: string) {
   const url = new URL(req.url);
   url.pathname = `${BASE_PATH}/login`;
   url.search = "";
-  url.searchParams.set("from", path);
-  return Response.redirect(url);
-});
+  url.searchParams.set("from", fromPath);
+  return NextResponse.redirect(url);
+}
+
+function clearStaleSession(res: NextResponse) {
+  // Stale cookies (signed with a different AUTH_SECRET) cause JWT decode to
+  // throw. Remove them so the next request starts cleanly.
+  res.cookies.delete("__Secure-authjs.session-token");
+  res.cookies.delete("authjs.session-token");
+  res.cookies.delete("__Secure-authjs.callback-url");
+  res.cookies.delete("authjs.callback-url");
+  res.cookies.delete("__Host-authjs.csrf-token");
+  res.cookies.delete("authjs.csrf-token");
+  return res;
+}
+
+export default async function middleware(req: NextRequest) {
+  if (PREVIEW) return NextResponse.next();
+
+  const path = stripBase(req.nextUrl.pathname);
+  if (PUBLIC.some((re) => re.test(path))) return NextResponse.next();
+
+  // Decode JWT directly so we can catch decode errors (stale AUTH_SECRET).
+  let isAdmin = false;
+  let decodeFailed = false;
+  try {
+    const token = await getToken({
+      req,
+      secret: process.env.AUTH_SECRET,
+      secureCookie: req.nextUrl.protocol === "https:",
+    });
+    isAdmin = Boolean(
+      (token as { isAdmin?: boolean } | null | undefined)?.isAdmin
+    );
+  } catch {
+    decodeFailed = true;
+  }
+
+  if (isAdmin) return NextResponse.next();
+
+  const res = buildLoginRedirect(req, path);
+  if (decodeFailed) clearStaleSession(res);
+  return res;
+}
 
 export const config = {
   matcher: [
