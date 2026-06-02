@@ -1,4 +1,5 @@
 import NextAuth from "next-auth";
+import { NextResponse } from "next/server";
 
 import { authConfig } from "@/lib/auth.config";
 
@@ -11,7 +12,12 @@ const PUBLIC = [
   /^\/api\/health$/,
 ];
 
+const PREVIEW = process.env.PREVIEW === "1";
+
 export default auth((req) => {
+  // Demo mode skips auth entirely. Never enable on the production host.
+  if (PREVIEW) return NextResponse.next();
+
   const path = req.nextUrl.pathname;
   if (PUBLIC.some((re) => re.test(path))) return;
 

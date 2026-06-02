@@ -11,6 +11,7 @@ import {
   type OrganizationUser,
 } from "@/lib/anthropic-admin";
 import { isoDateMinusDays } from "@/lib/format";
+import { PREVIEW } from "@/lib/preview";
 
 export const dynamic = "force-dynamic";
 export const runtime = "nodejs";
@@ -179,6 +180,12 @@ async function syncUsers(): Promise<number> {
 }
 
 export async function GET(req: Request) {
+  if (PREVIEW) {
+    return NextResponse.json(
+      { ok: false, error: "sync is disabled in PREVIEW mode" },
+      { status: 503 }
+    );
+  }
   if (!checkAuth(req)) {
     return NextResponse.json({ ok: false, error: "unauthorized" }, { status: 401 });
   }

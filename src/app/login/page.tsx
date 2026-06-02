@@ -1,6 +1,7 @@
 import { redirect } from "next/navigation";
 
 import { auth, signIn } from "@/lib/auth";
+import { PREVIEW } from "@/lib/preview";
 
 const ERRORS: Record<string, string> = {
   AccessDenied:
@@ -14,6 +15,7 @@ const ERRORS: Record<string, string> = {
 export default async function LoginPage(props: {
   searchParams: Promise<{ error?: string; from?: string }>;
 }) {
+  if (PREVIEW) redirect("/");
   const session = await auth();
   if (session?.user) redirect("/");
 

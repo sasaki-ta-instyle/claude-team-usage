@@ -2,6 +2,14 @@ import { and, desc, gte, lte, sql } from "drizzle-orm";
 
 import { db, schema } from "@/db/client";
 import { isoDateMinusDays, monthStartIso } from "@/lib/format";
+import {
+  PREVIEW,
+  mockMembers,
+  mockMemberDailyTrend,
+  mockMessagesSummary,
+  mockSyncLog,
+  mockUser,
+} from "@/lib/preview";
 
 export const PREMIUM_COST_CENTS_DEFAULT = 5000; // $50.00
 
@@ -21,6 +29,7 @@ export async function memberSummary(opts: {
   fromDate?: string;
   toDate?: string;
 }): Promise<MemberRow[]> {
+  if (PREVIEW) return mockMembers();
   const fromDate = opts.fromDate ?? monthStartIso();
   const toDate = opts.toDate ?? isoDateMinusDays(0);
 
@@ -73,6 +82,7 @@ export async function memberSummary(opts: {
 }
 
 export async function memberDailyTrend(email: string, days = 30) {
+  if (PREVIEW) return mockMemberDailyTrend(email, days);
   const fromDate = isoDateMinusDays(days);
   const toDate = isoDateMinusDays(0);
   return db
@@ -100,12 +110,14 @@ export async function memberDailyTrend(email: string, days = 30) {
 
 export async function getUserByEmail(email: string) {
   const e = email.toLowerCase();
+  if (PREVIEW) return mockUser(e);
   return db.query.users.findFirst({
     where: (t, { eq }) => eq(t.email, e),
   });
 }
 
 export async function syncLogRows(limit = 20) {
+  if (PREVIEW) return mockSyncLog().slice(0, limit);
   return db
     .select()
     .from(schema.syncLog)
@@ -117,6 +129,7 @@ export async function messagesUsageSummary(opts: {
   fromDate?: string;
   toDate?: string;
 }) {
+  if (PREVIEW) return mockMessagesSummary();
   const fromDate = opts.fromDate ?? monthStartIso();
   const toDate = opts.toDate ?? isoDateMinusDays(0);
 

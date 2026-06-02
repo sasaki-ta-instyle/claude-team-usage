@@ -2,6 +2,7 @@ import type { Metadata } from "next";
 import Link from "next/link";
 
 import { auth, signOut } from "@/lib/auth";
+import { PREVIEW } from "@/lib/preview";
 import "./globals.css";
 
 const SITE_URL = "https://app.instyle.group/claude-team-usage";
@@ -45,8 +46,11 @@ export default async function RootLayout({
 }: {
   children: React.ReactNode;
 }) {
-  const session = await auth();
-  const isLoggedIn = !!session?.user;
+  const session = PREVIEW ? null : await auth();
+  const isLoggedIn = PREVIEW || !!session?.user;
+  const headerEmail = PREVIEW
+    ? "preview@instyle.group (demo)"
+    : (session?.user?.email ?? "");
 
   return (
     <html lang="ja">
@@ -72,17 +76,23 @@ export default async function RootLayout({
                 ))}
               </nav>
               <div className="app-header__user">
-                <span>{session?.user?.email ?? ""}</span>
-                <form
-                  action={async () => {
-                    "use server";
-                    await signOut({ redirectTo: "/login" });
-                  }}
-                >
-                  <button className="btn" type="submit">
-                    サインアウト
-                  </button>
-                </form>
+                <span>{headerEmail}</span>
+                {PREVIEW ? (
+                  <span className="seat-badge seat-badge--premium" title="認証バイパス中">
+                    PREVIEW
+                  </span>
+                ) : (
+                  <form
+                    action={async () => {
+                      "use server";
+                      await signOut({ redirectTo: "/login" });
+                    }}
+                  >
+                    <button className="btn" type="submit">
+                      サインアウト
+                    </button>
+                  </form>
+                )}
               </div>
             </header>
             <main className="app-main">{children}</main>

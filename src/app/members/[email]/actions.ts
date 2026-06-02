@@ -5,8 +5,14 @@ import { revalidatePath } from "next/cache";
 
 import { db, schema } from "@/db/client";
 import { auth } from "@/lib/auth";
+import { PREVIEW } from "@/lib/preview";
 
 export async function updateSeatType(email: string, seatType: string | null) {
+  if (PREVIEW) {
+    // demo mode: pretend the update succeeded
+    revalidatePath(`/members/${encodeURIComponent(email)}`);
+    return;
+  }
   const session = await auth();
   if (!(session?.user as { isAdmin?: boolean } | undefined)?.isAdmin) {
     throw new Error("forbidden");
