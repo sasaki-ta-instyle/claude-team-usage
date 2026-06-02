@@ -1,8 +1,12 @@
-// Run drizzle migrations against the configured DATABASE_URL.
-// Executed during ConoHa deploy (USE_DB=true → pnpm migrate).
+// Apply drizzle migrations against DATABASE_URL.
+// Plain Node ESM (no tsx) so it runs on the ConoHa standalone host where only
+// runtime-traced deps are available. Drizzle migrator + pg are already pulled
+// in by the app code, so they're in .next/standalone/node_modules.
 import { drizzle } from "drizzle-orm/node-postgres";
 import { migrate } from "drizzle-orm/node-postgres/migrator";
-import { Pool } from "pg";
+import pg from "pg";
+
+const { Pool } = pg;
 
 async function main() {
   const connectionString = process.env.DATABASE_URL;
