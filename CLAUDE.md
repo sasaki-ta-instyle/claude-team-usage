@@ -8,7 +8,7 @@
 |---|---|
 | CATEGORY | `app` |
 | APP_NAME | `claude-team-usage` |
-| PORT | `3009` |
+| PORT | `3011` |
 | 公開URL | `https://app.instyle.group/claude-team-usage/` |
 | HEALTHCHECK_PATH | `/claude-team-usage/api/health` |
 | USE_DB | `true` |
@@ -73,11 +73,11 @@ ssh conoha-deploy 'mkdir -p /var/www/app/claude-team-usage/{releases,shared} \
 ssh conoha-root 'cat > /etc/nginx/conf.d/proxy-apps/app/claude-team-usage.conf <<"EOF"
 location = /claude-team-usage {
   include snippets/proxy-next.conf;
-  proxy_pass http://127.0.0.1:3009;
+  proxy_pass http://127.0.0.1:3011;
 }
 location ^~ /claude-team-usage/ {
   include snippets/proxy-next.conf;
-  proxy_pass http://127.0.0.1:3009;
+  proxy_pass http://127.0.0.1:3011;
 }
 EOF
 nginx -t && systemctl reload nginx'

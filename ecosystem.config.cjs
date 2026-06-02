@@ -5,7 +5,7 @@
 // Placeholders to replace per project:
 //   app = app | cpc | crhr
 //   claude-team-usage = repo / folder name
-//   3009     = from port registry
+//   3011     = from port registry
 
 const fs = require("fs");
 
@@ -38,7 +38,7 @@ module.exports = {
         ...envBase,
         ...envApp,
         NODE_ENV: "production",
-        PORT: "3009",
+        PORT: "3011",
         HOSTNAME: "127.0.0.1",
       },
     },
