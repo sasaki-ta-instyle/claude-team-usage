@@ -5,11 +5,11 @@ import { PREVIEW } from "@/lib/preview";
 
 const ERRORS: Record<string, string> = {
   AccessDenied:
-    "このメールアドレスではログインできません。@instyle.group の管理者アカウントが必要です。",
+    "このメールアドレスではログインできません。@instyle.group の管理者アカウントが必要です。心当たりがあれば admin に追加を依頼してください。",
   Verification:
-    "リンクの有効期限が切れているか、すでに使用されています。もう一度メールを送ってください。",
+    "リンクの有効期限が切れているか、すでに使用されています。もう一度メールアドレスを入力してマジックリンクを送り直してください。",
   Configuration:
-    "サーバ側の設定に問題があります。管理者に連絡してください。",
+    "サーバ側の設定を読み込めませんでした。ConoHa の /var/www/_shared/apps/app-claude-team-usage.env と Vercel の env を確認してください。",
 };
 
 export default async function LoginPage(props: {

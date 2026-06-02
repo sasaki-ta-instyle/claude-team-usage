@@ -12,12 +12,8 @@ type Member = {
   costCents: number;
 };
 
-const PRESETS = [
-  { label: "$25 を超えたら Premium", value: 25 },
-  { label: "$50 (推奨)", value: 50 },
-  { label: "$100", value: 100 },
-  { label: "$125 以上のみ Premium", value: 125 },
-];
+const PRESETS = [25, 50, 100, 125];
+const DEFAULT_THRESHOLD = 50;
 
 const PREMIUM_MONTHLY_USD = 125;
 const STANDARD_MONTHLY_USD = 25;
@@ -37,7 +33,7 @@ export function Simulator({
   members: Member[];
   jpyPerUsd: number;
 }) {
-  const [threshold, setThreshold] = useState<number>(50);
+  const [threshold, setThreshold] = useState<number>(DEFAULT_THRESHOLD);
 
   const fmtJpy = (usd: number) =>
     (usd * jpyPerUsd).toLocaleString("ja-JP", {
@@ -54,8 +50,10 @@ export function Simulator({
   const computed = useMemo(() => {
     const thresholdCents = Math.round(threshold * 100);
     const rows = members.map((m) => {
-      const recommend = m.costCents >= thresholdCents ? "premium" : "standard";
-      const planCost = recommend === "premium" ? PREMIUM_MONTHLY_USD : STANDARD_MONTHLY_USD;
+      const candidate =
+        m.costCents >= thresholdCents ? "premium" : "standard";
+      const planCost =
+        candidate === "premium" ? PREMIUM_MONTHLY_USD : STANDARD_MONTHLY_USD;
       const currentCost =
         m.seatType === "premium"
           ? PREMIUM_MONTHLY_USD
@@ -64,14 +62,14 @@ export function Simulator({
             : 0;
       return {
         ...m,
-        recommend,
+        candidate,
         planCost,
         currentCost,
         deltaUsd: planCost - currentCost,
       };
     });
 
-    const premiumCount = rows.filter((r) => r.recommend === "premium").length;
+    const premiumCount = rows.filter((r) => r.candidate === "premium").length;
     const standardCount = rows.length - premiumCount;
     const totalPlanCost =
       premiumCount * PREMIUM_MONTHLY_USD + standardCount * STANDARD_MONTHLY_USD;
@@ -90,23 +88,60 @@ export function Simulator({
   return (
     <>
       <section className="glass-panel">
-        <h2 style={{ marginTop: 0 }}>
-          閾値: 月コスト {fmtUsd(threshold)} 以上で Premium 推奨
-        </h2>
-        <div className="flex-row" style={{ marginBottom: 16 }}>
+        <h2 style={{ marginTop: 0 }}>閾値を設定する</h2>
+        <p className="muted" style={{ fontSize: 12, marginTop: 0 }}>
+          月コストがこの値以上のメンバーを Premium 候補と判定します。
+        </p>
+
+        <div
+          className="flex-row"
+          style={{ marginTop: 18, marginBottom: 22, alignItems: "flex-end" }}
+        >
+          <div className="threshold-readout">
+            {fmtUsd(threshold)}
+            <small>現在の閾値</small>
+          </div>
+          <span className="spacer" />
+          <div style={{ textAlign: "right", fontSize: 12, color: "var(--color-text-muted)" }}>
+            <div>
+              現状: <strong>{fmtUsd(computed.totalCurrentCost)}</strong>
+            </div>
+            <div>
+              判定後: <strong>{fmtUsd(computed.totalPlanCost)}</strong>
+            </div>
+            <div
+              style={{
+                marginTop: 4,
+                color:
+                  computed.deltaUsd > 0
+                    ? "var(--color-warning)"
+                    : computed.deltaUsd < 0
+                      ? "var(--color-success)"
+                      : "var(--color-text)",
+              }}
+            >
+              差分: {computed.deltaUsd >= 0 ? "+" : ""}
+              {fmtUsd(computed.deltaUsd)}
+            </div>
+          </div>
+        </div>
+
+        <div className="flex-row" style={{ marginBottom: 14 }}>
           {PRESETS.map((p) => (
             <button
-              key={p.value}
-              className={`btn${threshold === p.value ? " btn--primary" : ""}`}
-              onClick={() => setThreshold(p.value)}
+              key={p}
+              type="button"
+              className={`btn${threshold === p ? " btn--quiet-active" : ""}`}
+              onClick={() => setThreshold(p)}
             >
-              {p.label}
+              ${p}
+              {p === DEFAULT_THRESHOLD ? "（基準）" : ""}
             </button>
           ))}
         </div>
         <div className="flex-row">
           <label className="muted" style={{ fontSize: 12 }}>
-            カスタム: USD
+            カスタム USD
           </label>
           <input
             className="input"
@@ -116,7 +151,7 @@ export function Simulator({
             step={5}
             value={threshold}
             onChange={(e) => setThreshold(Number(e.target.value) || 0)}
-            style={{ width: 120 }}
+            style={{ width: 100 }}
           />
           <input
             type="range"
@@ -130,21 +165,21 @@ export function Simulator({
         </div>
       </section>
 
-      <section className="kpi-grid" style={{ marginTop: 24 }}>
+      <section className="kpi-hero-grid" style={{ marginTop: 24 }}>
+        <div className="kpi-hero">
+          <p className="kpi-label">判定後の月額</p>
+          <p className="kpi-value">{fmtUsd(computed.totalPlanCost)}</p>
+          <p className="kpi-sub">{fmtJpy(computed.totalPlanCost)}</p>
+        </div>
         <div className="card">
-          <p className="kpi-label">Premium 推奨</p>
+          <p className="kpi-label">Premium 候補</p>
           <p className="kpi-value">{computed.premiumCount}</p>
           <p className="kpi-sub">@ $125/月</p>
         </div>
         <div className="card">
-          <p className="kpi-label">Standard 推奨</p>
+          <p className="kpi-label">Standard 候補</p>
           <p className="kpi-value">{computed.standardCount}</p>
           <p className="kpi-sub">@ $25/月</p>
-        </div>
-        <div className="card">
-          <p className="kpi-label">推奨配分の月額</p>
-          <p className="kpi-value">{fmtUsd(computed.totalPlanCost)}</p>
-          <p className="kpi-sub">{fmtJpy(computed.totalPlanCost)}</p>
         </div>
         <div className="card">
           <p className="kpi-label">現状との差分</p>
@@ -154,71 +189,71 @@ export function Simulator({
               color:
                 computed.deltaUsd > 0
                   ? "var(--color-warning)"
-                  : "var(--color-success)",
+                  : computed.deltaUsd < 0
+                    ? "var(--color-success)"
+                    : "var(--color-text)",
             }}
           >
             {computed.deltaUsd >= 0 ? "+" : ""}
             {fmtUsd(computed.deltaUsd)}
           </p>
-          <p className="kpi-sub">
-            現状: {fmtUsd(computed.totalCurrentCost)} → 推奨:{" "}
-            {fmtUsd(computed.totalPlanCost)}
-          </p>
         </div>
       </section>
 
       <section className="glass-panel" style={{ marginTop: 24 }}>
-        <h2 style={{ marginTop: 0 }}>メンバー別の推奨</h2>
-        <table className="usage-table">
-          <thead>
-            <tr>
-              <th>メンバー</th>
-              <th className="num">月トークン</th>
-              <th className="num">月コスト</th>
-              <th>現状 seat</th>
-              <th>推奨 seat</th>
-              <th className="num">月差分</th>
-            </tr>
-          </thead>
-          <tbody>
-            {computed.rows.map((r) => (
-              <tr key={r.email}>
-                <td>
-                  {r.displayName ?? r.email}
-                  <div className="muted" style={{ fontSize: 11 }}>
-                    {r.email}
-                  </div>
-                </td>
-                <td className="num">{formatTokens(r.tokens)}</td>
-                <td className="num">{fmtCost(r.costCents)}</td>
-                <td>
-                  <span className={`seat-badge seat-badge--${r.seatType ?? "null"}`}>
-                    {r.seatType ?? "未設定"}
-                  </span>
-                </td>
-                <td>
-                  <span className={`seat-badge seat-badge--${r.recommend}`}>
-                    {r.recommend}
-                  </span>
-                </td>
-                <td
-                  className="num"
-                  style={{
-                    color:
-                      r.deltaUsd > 0
-                        ? "var(--color-warning)"
-                        : r.deltaUsd < 0
-                          ? "var(--color-success)"
-                          : "inherit",
-                  }}
-                >
-                  {r.deltaUsd > 0 ? "+" : ""}
-                  {fmtUsd(r.deltaUsd)}
-                </td>
+        <h2 style={{ marginTop: 0 }}>メンバー別の候補配分</h2>
+        <div className="table-scroll">
+          <table className="usage-table">
+            <thead>
+              <tr>
+                <th>メンバー</th>
+                <th className="num">月トークン</th>
+                <th className="num">月コスト</th>
+                <th>現状 seat</th>
+                <th>候補 seat</th>
+                <th className="num">月差分</th>
               </tr>
-            ))}
-          </tbody>
-        </table>
+            </thead>
+            <tbody>
+              {computed.rows.map((r) => (
+                <tr key={r.email}>
+                  <td>
+                    {r.displayName ?? r.email}
+                    <div className="muted" style={{ fontSize: 11 }}>
+                      {r.email}
+                    </div>
+                  </td>
+                  <td className="num">{formatTokens(r.tokens)}</td>
+                  <td className="num">{fmtCost(r.costCents)}</td>
+                  <td>
+                    <span className={`seat-badge seat-badge--${r.seatType ?? "null"}`}>
+                      {r.seatType ?? "未設定"}
+                    </span>
+                  </td>
+                  <td>
+                    <span className={`seat-badge seat-badge--${r.candidate}`}>
+                      {r.candidate}
+                    </span>
+                  </td>
+                  <td
+                    className="num"
+                    style={{
+                      color:
+                        r.deltaUsd > 0
+                          ? "var(--color-warning)"
+                          : r.deltaUsd < 0
+                            ? "var(--color-success)"
+                            : "inherit",
+                    }}
+                  >
+                    {r.deltaUsd > 0 ? "+" : ""}
+                    {fmtUsd(r.deltaUsd)}
+                  </td>
+                </tr>
+              ))}
+            </tbody>
+          </table>
+        </div>
       </section>
     </>
   );

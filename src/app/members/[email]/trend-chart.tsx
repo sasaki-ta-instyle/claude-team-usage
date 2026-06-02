@@ -59,7 +59,7 @@ export function TrendChart({ data }: { data: TrendPoint[] }) {
             type="monotone"
             dataKey="tokens"
             name="トークン"
-            stroke="#35362D"
+            stroke="var(--chart-1, #35362D)"
             strokeWidth={2}
             dot={false}
             activeDot={{ r: 4 }}
@@ -69,7 +69,7 @@ export function TrendChart({ data }: { data: TrendPoint[] }) {
             type="monotone"
             dataKey="costUsd"
             name="推定コスト (USD)"
-            stroke="#D4772C"
+            stroke="var(--chart-2, #D4772C)"
             strokeWidth={2}
             dot={false}
             activeDot={{ r: 4 }}

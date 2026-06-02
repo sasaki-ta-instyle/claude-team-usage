@@ -36,6 +36,7 @@ export default async function MemberDetailPage(props: {
   const totalCostCents = rows.reduce((a, r) => a + (r.estimatedCostCents ?? 0), 0);
   const totalSessions = rows.reduce((a, r) => a + (r.sessions ?? 0), 0);
   const totalCommits = rows.reduce((a, r) => a + (r.commits ?? 0), 0);
+  const [costUsd, costJpy] = formatCost(totalCostCents).split(" / ");
 
   return (
     <>
@@ -49,15 +50,15 @@ export default async function MemberDetailPage(props: {
         {email} ・ 期間: <strong>{fromDate}</strong> – <strong>{toDate}</strong>
       </p>
 
-      <section className="kpi-grid">
+      <section className="kpi-hero-grid">
+        <div className="kpi-hero">
+          <p className="kpi-label">過去 30 日の推定コスト</p>
+          <p className="kpi-value">{costUsd}</p>
+          <p className="kpi-sub">{costJpy}</p>
+        </div>
         <div className="card">
           <p className="kpi-label">合計トークン</p>
           <p className="kpi-value">{formatTokens(totalTokens)}</p>
-        </div>
-        <div className="card">
-          <p className="kpi-label">推定コスト</p>
-          <p className="kpi-value">{formatCost(totalCostCents).split(" / ")[0]}</p>
-          <p className="kpi-sub">{formatCost(totalCostCents).split(" / ")[1]}</p>
         </div>
         <div className="card">
           <p className="kpi-label">セッション</p>
@@ -81,8 +82,9 @@ export default async function MemberDetailPage(props: {
       <section className="glass-panel" style={{ marginTop: 24 }}>
         <h2 style={{ marginTop: 0 }}>Seat タグ</h2>
         <p className="muted" style={{ fontSize: 12 }}>
-          現在: <strong>{user?.seatType ?? "未設定"}</strong>。Admin API が seat 種別を
-          返した場合、次回 sync で自動上書きされます（手動値は API が未返却の時のみ尊重）。
+          現在: <strong>{user?.seatType ?? "未設定"}</strong>。
+          Admin API が seat 種別を返したら、次回 sync で自動上書きします。
+          手動値は API が値を返さないときのみ保持されます。
         </p>
         <SeatForm email={email} current={user?.seatType ?? null} />
       </section>

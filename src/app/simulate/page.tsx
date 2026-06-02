@@ -13,7 +13,7 @@ export default async function SimulatePage() {
     <>
       <h1 className="page-title">配分シミュレーション</h1>
       <p className="page-subtitle">
-        当月の Claude Code 使用量から Premium ($125) / Standard ($25) の最適配分を試算。
+        当月の Claude Code 使用量から Premium ($125) / Standard ($25) の候補配分を試算。
         期間: <strong>{fromDate}</strong> – <strong>{toDate}</strong>。
       </p>
       <Simulator

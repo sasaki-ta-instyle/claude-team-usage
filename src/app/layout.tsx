@@ -1,8 +1,8 @@
 import type { Metadata } from "next";
-import Link from "next/link";
 
 import { auth, signOut } from "@/lib/auth";
 import { PREVIEW } from "@/lib/preview";
+import { AppNav } from "./_nav";
 import "./globals.css";
 
 const SITE_URL = "https://app.instyle.group/claude-team-usage";
@@ -33,14 +33,6 @@ export const metadata: Metadata = {
   },
 };
 
-const NAV = [
-  { href: "/", label: "概要" },
-  { href: "/members", label: "メンバー" },
-  { href: "/api-messages", label: "API Messages" },
-  { href: "/simulate", label: "配分シミュレーション" },
-  { href: "/sync-log", label: "取り込み履歴" },
-];
-
 export default async function RootLayout({
   children,
 }: {
@@ -68,31 +60,25 @@ export default async function RootLayout({
                 />
                 <span className="app-header__title">Claude Team Usage</span>
               </div>
-              <nav className="app-nav">
-                {NAV.map((n) => (
-                  <Link key={n.href} href={n.href}>
-                    {n.label}
-                  </Link>
-                ))}
-              </nav>
+              <AppNav />
               <div className="app-header__user">
-                <span>{headerEmail}</span>
                 {PREVIEW ? (
-                  <span className="seat-badge seat-badge--premium" title="認証バイパス中">
+                  <span className="env-badge" title="認証バイパス中（モックデータ）">
                     PREVIEW
                   </span>
-                ) : (
-                  <form
-                    action={async () => {
-                      "use server";
-                      await signOut({ redirectTo: "/login" });
-                    }}
-                  >
-                    <button className="btn" type="submit">
-                      サインアウト
-                    </button>
-                  </form>
-                )}
+                ) : null}
+                <span>{headerEmail}</span>
+                <form
+                  action={async () => {
+                    "use server";
+                    if (PREVIEW) return; // demo mode: no-op
+                    await signOut({ redirectTo: "/login" });
+                  }}
+                >
+                  <button className="btn" type="submit">
+                    サインアウト
+                  </button>
+                </form>
               </div>
             </header>
             <main className="app-main">{children}</main>
