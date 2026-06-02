@@ -54,10 +54,12 @@ JPY_PER_USD="${JPY_PER_USD:-155}"
 AUTH_SECRET="$(openssl rand -base64 48 | tr -d '\n')"
 SYNC_TOKEN="$(openssl rand -hex 32)"
 
-# bcrypt hash の `$` を `\$` にエスケープして env 経由でも壊れないように。
-# Next.js の dotenv-expand が $2a を変数展開して hash を破壊する既知の落とし穴。
-RAW_HASH="$(node -e "process.stdout.write(require('bcryptjs').hashSync(process.argv[1], 12))" "${ADMIN_PASSWORD}")"
-ESCAPED_HASH="${RAW_HASH//\$/\\$}"
+# bcrypt hash は single-quote で wrap して書き出すため、`$` のバックスラッシュ
+# エスケープは不要（quote 内で literal 扱いになる）。
+# 旧仕様では `\$` にエスケープしていたが、新しい qq() の single-quote wrap と
+# 二重に効いて hash 中に literal `\$` が混入し、bcrypt.compare が常に false
+# になっていた。
+ADMIN_PASSWORD_HASH="$(node -e "process.stdout.write(require('bcryptjs').hashSync(process.argv[1], 12))" "${ADMIN_PASSWORD}")"
 
 tmp="$(mktemp -t claude-team-usage-env.XXXXXX)"
 trap 'rm -f "$tmp"' EXIT
@@ -71,7 +73,7 @@ qq() { printf "'%s'" "${1//\'/\'\\\'\'}"; }
   echo "AUTH_SECRET=$(qq "${AUTH_SECRET}")"
   echo "AUTH_URL=$(qq "${AUTH_BASE_URL}")"
   echo "AUTH_TRUST_HOST=true"
-  echo "ADMIN_PASSWORD_HASH=$(qq "${ESCAPED_HASH}")"
+  echo "ADMIN_PASSWORD_HASH=$(qq "${ADMIN_PASSWORD_HASH}")"
   echo "ANTHROPIC_ADMIN_API_KEY=$(qq "${ANTHROPIC_ADMIN_API_KEY}")"
   [ -n "${ANTHROPIC_ORG_ID}" ] && echo "ANTHROPIC_ORG_ID=$(qq "${ANTHROPIC_ORG_ID}")"
   echo "SYNC_TOKEN=$(qq "${SYNC_TOKEN}")"
