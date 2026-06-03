@@ -28,12 +28,24 @@ function rangeBounds(from?: Date, to?: Date) {
   return { fromD, toD };
 }
 
+// resource.service.name で event を振り分ける。
+// cowork → Cowork から push、claude-code / claude_code → Claude Code CLI から push。
+// raw JSONB に resource を保存しているのでそちらから引く。
+function serviceFilter(serviceName: "cowork" | "claude-code") {
+  if (serviceName === "cowork") {
+    return sql`coalesce(${schema.coworkEvents.raw}->'resource'->>'service.name', '') = 'cowork'`;
+  }
+  return sql`coalesce(${schema.coworkEvents.raw}->'resource'->>'service.name', '') in ('claude-code', 'claude_code')`;
+}
+
 export async function coworkMemberSummary(opts: {
   from?: Date;
   to?: Date;
+  service?: "cowork" | "claude-code";
 }): Promise<CoworkMemberRow[]> {
   if (PREVIEW) return COWORK_MOCK_MEMBERS.map((m) => ({ ...m }));
   const { fromD, toD } = rangeBounds(opts.from, opts.to);
+  const service = opts.service ?? "cowork";
 
   const rows = await db
     .select({
@@ -54,7 +66,8 @@ export async function coworkMemberSummary(opts: {
       and(
         gte(schema.coworkEvents.occurredAt, fromD),
         lte(schema.coworkEvents.occurredAt, toD),
-        sql`${schema.coworkEvents.userEmail} is not null`
+        sql`${schema.coworkEvents.userEmail} is not null`,
+        serviceFilter(service)
       )
     )
     .groupBy(schema.coworkEvents.userEmail);
@@ -79,9 +92,14 @@ export async function coworkMemberSummary(opts: {
     .sort((a, b) => b.totalCostCents - a.totalCostCents);
 }
 
-export async function coworkOverall(opts: { from?: Date; to?: Date }) {
+export async function coworkOverall(opts: {
+  from?: Date;
+  to?: Date;
+  service?: "cowork" | "claude-code";
+}) {
   if (PREVIEW) return mockCoworkOverall();
   const { fromD, toD } = rangeBounds(opts.from, opts.to);
+  const service = opts.service ?? "cowork";
   const rows = await db
     .select({
       uniqueUsers: sql<number>`count(distinct ${schema.coworkEvents.userEmail})`,
@@ -94,7 +112,8 @@ export async function coworkOverall(opts: { from?: Date; to?: Date }) {
     .where(
       and(
         gte(schema.coworkEvents.occurredAt, fromD),
-        lte(schema.coworkEvents.occurredAt, toD)
+        lte(schema.coworkEvents.occurredAt, toD),
+        serviceFilter(service)
       )
     );
   const r = rows[0] ?? {
@@ -113,7 +132,12 @@ export async function coworkOverall(opts: { from?: Date; to?: Date }) {
   };
 }
 
-export async function coworkRecentEvents(limit = 20) {
+export async function coworkRecentEvents(opts: {
+  limit?: number;
+  service?: "cowork" | "claude-code";
+} = {}) {
+  const limit = opts.limit ?? 20;
+  const service = opts.service ?? "cowork";
   if (PREVIEW) return mockCoworkRecentEvents().slice(0, limit);
   return db
     .select({
@@ -128,6 +152,7 @@ export async function coworkRecentEvents(limit = 20) {
       errorText: schema.coworkEvents.errorText,
     })
     .from(schema.coworkEvents)
+    .where(serviceFilter(service))
     .orderBy(desc(schema.coworkEvents.occurredAt))
     .limit(limit);
 }

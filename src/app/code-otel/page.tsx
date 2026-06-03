@@ -17,9 +17,12 @@ const EVENT_LABEL: Record<string, string> = {
   api_error: "API エラー",
   tool_result: "ツール実行",
   tool_decision: "ツール判定",
+  hook_execution_start: "フック開始",
+  hook_execution_complete: "フック完了",
+  plugin_loaded: "プラグイン読込",
 };
 
-export default async function CoworkPage(props: {
+export default async function CodeOtelPage(props: {
   searchParams: Promise<{ days?: string }>;
 }) {
   if (!PREVIEW) {
@@ -32,31 +35,33 @@ export default async function CoworkPage(props: {
   const from = new Date(to.getTime() - range * 24 * 60 * 60 * 1000);
 
   const [overall, members, recent] = await Promise.all([
-    coworkOverall({ from, to, service: "cowork" }),
-    coworkMemberSummary({ from, to, service: "cowork" }),
-    coworkRecentEvents({ limit: 20, service: "cowork" }),
+    coworkOverall({ from, to, service: "claude-code" }),
+    coworkMemberSummary({ from, to, service: "claude-code" }),
+    coworkRecentEvents({ limit: 20, service: "claude-code" }),
   ]);
 
   const [costUsd, costJpy] = formatCost(overall.totalCostCents).split(" / ");
 
   return (
     <>
-      <h1 className="page-title">Cowork</h1>
+      <h1 className="page-title">Code（OTel push）</h1>
       <p className="page-subtitle">
-        過去 <strong>{range}</strong> 日。Cowork admin の Monitoring から
-        OTLP push で受信したイベントを集計。
+        過去 <strong>{range}</strong> 日。各メンバーの Claude Code CLI から
+        OTel push で受信したイベントを集計（Anthropic Admin API 由来の
+        /members とは別経路）。
       </p>
 
       {overall.uniqueUsers === 0 ? (
         <div className="callout">
           <strong>未受信</strong>
           <span>
-            Cowork からのテレメトリがまだ届いていません。Cowork admin（Admin
-            settings &gt; Cowork &gt; Monitoring）で OTLP エンドポイントに
-            <code> https://app.instyle.group/claude-team-usage/api/otel </code>
-            （末尾に /v1/logs は付けない — exporter が自動付与）を設定し、
-            Authorization ヘッダに <code>COWORK_OTEL_AUTH</code>
-            と同じ値を入れてください。
+            まだ Claude Code CLI からのテレメトリが届いていません。各メンバーの
+            ターミナルで{" "}
+            <code>
+              bash &lt;(curl -sS https://raw.githubusercontent.com/sasaki-ta-instyle/claude-team-usage/main/scripts/install-claude-code-otel.sh)
+            </code>{" "}
+            を実行 → 新しいターミナル → 普段通り <code>claude</code> を使うと、
+            自動的にここに出現します。
           </span>
         </div>
       ) : null}
@@ -65,12 +70,12 @@ export default async function CoworkPage(props: {
         <div className="kpi-hero">
           <p className="kpi-label">期間の合計コスト</p>
           <p className="kpi-value">{costUsd}</p>
-          <p className="kpi-sub">{costJpy} ・ Cowork イベントの cost_usd 合計</p>
+          <p className="kpi-sub">{costJpy} ・ Claude Code OTel cost_usd 合計</p>
         </div>
         <div className="card">
           <p className="kpi-label">利用ユーザー</p>
           <p className="kpi-value">{overall.uniqueUsers}</p>
-          <p className="kpi-sub">期間内に user_prompt を送った人数</p>
+          <p className="kpi-sub">期間内に Code を使った人数</p>
         </div>
         <div className="card">
           <p className="kpi-label">プロンプト数</p>
@@ -86,7 +91,7 @@ export default async function CoworkPage(props: {
       <section className="glass-panel">
         <h2 style={{ marginTop: 0 }}>ユーザー別の利用</h2>
         {members.length === 0 ? (
-          <p className="muted">期間内に Cowork を使ったメンバーはいません。</p>
+          <p className="muted">期間内に Code を使ったメンバーはいません。</p>
         ) : (
           <div className="table-scroll">
             <table className="usage-table">
