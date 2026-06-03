@@ -121,6 +121,32 @@ export const messagesUsageDaily = pgTable(
   })
 );
 
+// Cowork OpenTelemetry イベント（Cowork admin > Monitoring から push される
+// OTLP/HTTP logs を受信して保存）。
+export const coworkEvents = pgTable("cowork_events", {
+  id: serial("id").primaryKey(),
+  occurredAt: timestamp("occurred_at", { withTimezone: true }).notNull(),
+  receivedAt: timestamp("received_at", { withTimezone: true })
+    .notNull()
+    .defaultNow(),
+  eventName: text("event_name").notNull(),
+  userEmail: text("user_email"),
+  sessionId: text("session_id"),
+  organizationId: text("organization_id"),
+  promptId: text("prompt_id"),
+  model: text("model"),
+  inputTokens: integer("input_tokens"),
+  outputTokens: integer("output_tokens"),
+  costUsdCents: integer("cost_usd_cents"),
+  durationMs: integer("duration_ms"),
+  toolName: text("tool_name"),
+  decision: text("decision"),
+  errorText: text("error_text"),
+  statusCode: integer("status_code"),
+  promptLength: integer("prompt_length"),
+  raw: jsonb("raw"),
+});
+
 export const syncLog = pgTable("sync_log", {
   id: serial("id").primaryKey(),
   ranAt: timestamp("ran_at", { withTimezone: true }).notNull().defaultNow(),

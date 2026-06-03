@@ -16,6 +16,7 @@ const PUBLIC = [
   /^\/api\/auth(\/|$)/,
   /^\/api\/sync(\/|$)/,
   /^\/api\/health$/,
+  /^\/api\/otel(\/|$)/, // Cowork からの OTLP push 受信用
 ];
 
 const PREVIEW = process.env.PREVIEW === "1";

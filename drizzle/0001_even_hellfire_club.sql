@@ -1,0 +1,21 @@
+CREATE TABLE "cowork_events" (
+	"id" serial PRIMARY KEY NOT NULL,
+	"occurred_at" timestamp with time zone NOT NULL,
+	"received_at" timestamp with time zone DEFAULT now() NOT NULL,
+	"event_name" text NOT NULL,
+	"user_email" text,
+	"session_id" text,
+	"organization_id" text,
+	"prompt_id" text,
+	"model" text,
+	"input_tokens" integer,
+	"output_tokens" integer,
+	"cost_usd_cents" integer,
+	"duration_ms" integer,
+	"tool_name" text,
+	"decision" text,
+	"error_text" text,
+	"status_code" integer,
+	"prompt_length" integer,
+	"raw" jsonb
+);

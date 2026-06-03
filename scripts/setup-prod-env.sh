@@ -53,6 +53,9 @@ JPY_PER_USD="${JPY_PER_USD:-155}"
 # Auto-generated secrets
 AUTH_SECRET="$(openssl rand -base64 48 | tr -d '\n')"
 SYNC_TOKEN="$(openssl rand -hex 32)"
+# Cowork OTLP push 用の Basic auth（"Basic <base64>"）。
+COWORK_OTEL_TOKEN="$(openssl rand -hex 32)"
+COWORK_OTEL_AUTH="Basic $(printf 'cowork:%s' "${COWORK_OTEL_TOKEN}" | base64 | tr -d '\n')"
 
 # bcrypt hash は single-quote で wrap して書き出すため、`$` のバックスラッシュ
 # エスケープは不要（quote 内で literal 扱いになる）。
@@ -78,6 +81,7 @@ qq() { printf "'%s'" "${1//\'/\'\\\'\'}"; }
   [ -n "${ANTHROPIC_ORG_ID}" ] && echo "ANTHROPIC_ORG_ID=$(qq "${ANTHROPIC_ORG_ID}")"
   echo "SYNC_TOKEN=$(qq "${SYNC_TOKEN}")"
   echo "JPY_PER_USD=$(qq "${JPY_PER_USD}")"
+  echo "COWORK_OTEL_AUTH=$(qq "${COWORK_OTEL_AUTH}")"
 } > "$tmp"
 
 bold "installing env on ConoHa (deploy:deploy, mode 600)"
@@ -100,3 +104,11 @@ echo
 echo "  値の存在だけ確認したい場合（中身は出さない）:"
 echo "    ssh ${SERVER_HOST_ALIAS} 'grep -c ^SYNC_TOKEN= ${REMOTE_ENV}'  # → 1 なら OK"
 echo "    ssh ${SERVER_HOST_ALIAS} 'grep -c ^ADMIN_PASSWORD_HASH= ${REMOTE_ENV}'  # → 1 なら OK"
+echo
+echo "  --- Cowork admin settings > Monitoring に貼り付け ---"
+echo
+echo "  OTLP エンドポイント: ${APP_URL}/api/otel/logs"
+echo "  OTLP プロトコル: http/protobuf"
+echo "  OTLP ヘッダー: Authorization=${COWORK_OTEL_AUTH}"
+echo
+echo "  上記 3 行を Cowork の admin に入力すると、テレメトリ受信開始。"
