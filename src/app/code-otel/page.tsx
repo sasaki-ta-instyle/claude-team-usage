@@ -55,13 +55,12 @@ export default async function CodeOtelPage(props: {
         <div className="callout">
           <strong>未受信</strong>
           <span>
-            まだ Claude Code CLI からのテレメトリが届いていません。各メンバーの
-            ターミナルで{" "}
-            <code>
-              bash &lt;(curl -sS https://raw.githubusercontent.com/sasaki-ta-instyle/claude-team-usage/main/scripts/install-claude-code-otel.sh)
-            </code>{" "}
-            を実行 → 新しいターミナル → 普段通り <code>claude</code> を使うと、
-            自動的にここに出現します。
+            まだ Claude Code からのテレメトリが届いていません。claude.ai 組織
+            設定 → Claude Code → 管理設定（settings.json）に
+            <code>env.CLAUDE_CODE_ENABLE_TELEMETRY</code> や
+            <code>env.OTEL_EXPORTER_OTLP_ENDPOINT</code> 等を設定すると、
+            組織内の全 CLI / IDE / Desktop に自動配信されます。詳細は本リポジトリ
+            の <code>CLAUDE.md</code>「組織配信」節を参照。
           </span>
         </div>
       ) : null}
