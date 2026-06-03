@@ -74,7 +74,9 @@ export default async function RootLayout({
                   action={async () => {
                     "use server";
                     if (PREVIEW) return; // demo mode: no-op
-                    await signOut({ redirectTo: "/login" });
+                    // Auth.js v5 は redirectTo を素のサブドメイン直下に解釈する
+                    // ので basePath を明示する。
+                    await signOut({ redirectTo: "/claude-team-usage/login" });
                   }}
                 >
                   <button className="btn" type="submit">
