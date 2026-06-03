@@ -107,7 +107,8 @@ echo "    ssh ${SERVER_HOST_ALIAS} 'grep -c ^ADMIN_PASSWORD_HASH= ${REMOTE_ENV}'
 echo
 echo "  --- Cowork admin settings > Monitoring に貼り付け ---"
 echo
-echo "  OTLP エンドポイント: ${APP_URL}/api/otel/logs"
+echo "  OTLP エンドポイント: ${APP_URL}/api/otel"
+echo "    （末尾に /v1/logs を付けないこと。OTLP exporter が signal 別 path を自動付与する）"
 echo "  OTLP プロトコル: http/protobuf"
 echo "  OTLP ヘッダー: Authorization=${COWORK_OTEL_AUTH}"
 echo

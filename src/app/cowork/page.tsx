@@ -53,8 +53,9 @@ export default async function CoworkPage(props: {
           <span>
             Cowork からのテレメトリがまだ届いていません。Cowork admin（Admin
             settings &gt; Cowork &gt; Monitoring）で OTLP エンドポイントに
-            <code> https://app.instyle.group/claude-team-usage/api/otel/logs </code>
-            を設定し、Authorization ヘッダに <code>COWORK_OTEL_AUTH</code>
+            <code> https://app.instyle.group/claude-team-usage/api/otel </code>
+            （末尾に /v1/logs は付けない — exporter が自動付与）を設定し、
+            Authorization ヘッダに <code>COWORK_OTEL_AUTH</code>
             と同じ値を入れてください。
           </span>
         </div>
