@@ -72,30 +72,68 @@ export async function handleOtelLogs(req: Request) {
     return NextResponse.json({ ok: true, inserted: 0 });
   }
 
+  // OTel セマンティック規約に従ってドット区切りキーを優先しつつ、互換のため
+  // アンダースコア版も fallback として見る。Cowork（Claude Agent SDK）の
+  // 実イベント例: user.email / session.id / organization.id / prompt.id /
+  // event.name / terminal.type / model / cost_usd / cost_usd_micros /
+  // input_tokens / output_tokens / cache_read_tokens / cache_creation_tokens
+  // / duration_ms / request_id 等。
+  function pickFirst<T>(
+    keys: string[],
+    fn: (key: string) => T | null
+  ): T | null {
+    for (const k of keys) {
+      const v = fn(k);
+      if (v != null) return v;
+    }
+    return null;
+  }
+
   const rows = records.map((r) => {
     const a = r.attributes;
-    const cost = a["cost_usd"];
-    const costCents =
-      typeof cost === "number" ? Math.round(cost * 100) : null;
+    const res = r.resourceAttributes;
+    const lookupStr = (k: string) =>
+      pickStr(a, k) ?? pickStr(res, k);
+    const lookupNum = (k: string) =>
+      pickNum(a, k) ?? pickNum(res, k);
+
+    // cost: dollars (cost_usd) or micros (cost_usd_micros)。両方あれば
+    // micros の方が精度高いのでそちらを優先。
+    const costMicros = a["cost_usd_micros"] ?? res["cost_usd_micros"];
+    const costUsd = a["cost_usd"] ?? res["cost_usd"];
+    let costCents: number | null = null;
+    if (typeof costMicros === "number") costCents = Math.round(costMicros / 10_000);
+    else if (typeof costUsd === "number") costCents = Math.round(costUsd * 100);
+
+    const promptLenRaw = a["prompt_length"] ?? a["prompt.length"];
+    const promptLength =
+      typeof promptLenRaw === "string" && /^\d+$/.test(promptLenRaw)
+        ? Number(promptLenRaw)
+        : typeof promptLenRaw === "number"
+          ? promptLenRaw
+          : null;
+
     return {
       occurredAt: r.occurredAt,
       eventName: eventNameOf(a, r.body),
-      userEmail: pickStr(a, "user_email") ?? pickStr(r.resourceAttributes, "user_email"),
-      sessionId: pickStr(a, "session_id"),
-      organizationId:
-        pickStr(a, "organization_id") ?? pickStr(r.resourceAttributes, "organization_id"),
-      promptId: pickStr(a, "prompt.id") ?? pickStr(a, "prompt_id"),
-      model: pickStr(a, "model"),
-      inputTokens: pickNum(a, "input_tokens"),
-      outputTokens: pickNum(a, "output_tokens"),
+      userEmail: pickFirst(["user.email", "user_email"], lookupStr),
+      sessionId: pickFirst(["session.id", "session_id"], lookupStr),
+      organizationId: pickFirst(
+        ["organization.id", "organization_id"],
+        lookupStr
+      ),
+      promptId: pickFirst(["prompt.id", "prompt_id"], lookupStr),
+      model: pickFirst(["model", "gen_ai.request.model"], lookupStr),
+      inputTokens: pickFirst(["input_tokens", "gen_ai.usage.input_tokens"], lookupNum),
+      outputTokens: pickFirst(["output_tokens", "gen_ai.usage.output_tokens"], lookupNum),
       costUsdCents: costCents,
-      durationMs: pickNum(a, "duration_ms"),
-      toolName: pickStr(a, "tool_name"),
-      decision: pickStr(a, "decision") ?? pickStr(a, "source"),
-      errorText: pickStr(a, "error"),
-      statusCode: pickNum(a, "status_code"),
-      promptLength: pickNum(a, "prompt_length"),
-      raw: { attrs: a, resource: r.resourceAttributes, body: r.body },
+      durationMs: pickFirst(["duration_ms"], lookupNum),
+      toolName: pickFirst(["tool_name", "tool.name"], lookupStr),
+      decision: pickFirst(["decision", "source"], lookupStr),
+      errorText: pickFirst(["error", "error.message"], lookupStr),
+      statusCode: pickFirst(["status_code"], lookupNum),
+      promptLength,
+      raw: { attrs: a, resource: res, body: r.body },
     };
   });
 
