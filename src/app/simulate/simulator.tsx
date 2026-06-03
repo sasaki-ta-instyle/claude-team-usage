@@ -10,6 +10,8 @@ type Member = {
   seatType: string | null;
   tokens: number;
   costCents: number;
+  coworkCostCents?: number;
+  codeCostCents?: number;
 };
 
 const PRESETS = [25, 50, 100, 125];
@@ -208,8 +210,9 @@ export function Simulator({
               <tr>
                 <th>メンバー</th>
                 <th className="num">月トークン</th>
-                <th className="num">月コスト</th>
-                <th>現状 seat</th>
+                <th className="num">Cowork コスト</th>
+                <th className="num">Code コスト</th>
+                <th className="num">合計コスト</th>
                 <th>候補 seat</th>
                 <th className="num">月差分</th>
               </tr>
@@ -224,12 +227,9 @@ export function Simulator({
                     </div>
                   </td>
                   <td className="num">{formatTokens(r.tokens)}</td>
-                  <td className="num">{fmtCost(r.costCents)}</td>
-                  <td>
-                    <span className={`seat-badge seat-badge--${r.seatType ?? "null"}`}>
-                      {r.seatType ?? "未設定"}
-                    </span>
-                  </td>
+                  <td className="num">{fmtCost(r.coworkCostCents ?? 0)}</td>
+                  <td className="num">{fmtCost(r.codeCostCents ?? 0)}</td>
+                  <td className="num"><strong>{fmtCost(r.costCents)}</strong></td>
                   <td>
                     <span className={`seat-badge seat-badge--${r.candidate}`}>
                       {r.candidate}

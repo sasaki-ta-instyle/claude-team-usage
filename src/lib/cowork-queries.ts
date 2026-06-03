@@ -132,6 +132,147 @@ export async function coworkOverall(opts: {
   };
 }
 
+// ─── Cowork + Code を統合した集計（メイン画面が使う） ───
+
+export type CombinedMemberRow = {
+  email: string;
+  coworkCostCents: number;
+  codeCostCents: number;
+  totalCostCents: number;
+  coworkPrompts: number;
+  codePrompts: number;
+  coworkTokens: number;
+  codeTokens: number;
+  totalTokens: number;
+  firstSeen: string | null;
+  lastSeen: string | null;
+};
+
+const SVC_COWORK = sql`coalesce(${schema.coworkEvents.raw}->'resource'->>'service.name', '') = 'cowork'`;
+const SVC_CODE = sql`coalesce(${schema.coworkEvents.raw}->'resource'->>'service.name', '') in ('claude-code', 'claude_code')`;
+const SVC_ANY = sql`coalesce(${schema.coworkEvents.raw}->'resource'->>'service.name', '') in ('cowork', 'claude-code', 'claude_code')`;
+
+export async function combinedMemberSummary(opts: {
+  from?: Date;
+  to?: Date;
+}): Promise<CombinedMemberRow[]> {
+  if (PREVIEW) {
+    return COWORK_MOCK_MEMBERS.map((m) => {
+      const cowork = Math.round(m.totalCostCents * 0.62);
+      const code = m.totalCostCents - cowork;
+      const tokens = m.inputTokens + m.outputTokens;
+      return {
+        email: m.email,
+        coworkCostCents: cowork,
+        codeCostCents: code,
+        totalCostCents: m.totalCostCents,
+        coworkPrompts: Math.round(m.promptCount * 0.7),
+        codePrompts: m.promptCount - Math.round(m.promptCount * 0.7),
+        coworkTokens: Math.round(tokens * 0.6),
+        codeTokens: tokens - Math.round(tokens * 0.6),
+        totalTokens: tokens,
+        firstSeen: m.firstSeen,
+        lastSeen: m.lastSeen,
+      };
+    });
+  }
+  const { fromD, toD } = rangeBounds(opts.from, opts.to);
+
+  const rows = await db
+    .select({
+      email: schema.coworkEvents.userEmail,
+      coworkCost: sql<number>`coalesce(sum(case when ${SVC_COWORK} then ${schema.coworkEvents.costUsdCents} else 0 end), 0)`,
+      codeCost: sql<number>`coalesce(sum(case when ${SVC_CODE} then ${schema.coworkEvents.costUsdCents} else 0 end), 0)`,
+      coworkPrompts: sql<number>`coalesce(sum(case when ${SVC_COWORK} and ${schema.coworkEvents.eventName} = 'user_prompt' then 1 else 0 end), 0)`,
+      codePrompts: sql<number>`coalesce(sum(case when ${SVC_CODE} and ${schema.coworkEvents.eventName} = 'user_prompt' then 1 else 0 end), 0)`,
+      coworkTokens: sql<number>`coalesce(sum(case when ${SVC_COWORK} then coalesce(${schema.coworkEvents.inputTokens}, 0) + coalesce(${schema.coworkEvents.outputTokens}, 0) else 0 end), 0)`,
+      codeTokens: sql<number>`coalesce(sum(case when ${SVC_CODE} then coalesce(${schema.coworkEvents.inputTokens}, 0) + coalesce(${schema.coworkEvents.outputTokens}, 0) else 0 end), 0)`,
+      firstSeen: sql<string | null>`min(${schema.coworkEvents.occurredAt})`,
+      lastSeen: sql<string | null>`max(${schema.coworkEvents.occurredAt})`,
+    })
+    .from(schema.coworkEvents)
+    .where(
+      and(
+        gte(schema.coworkEvents.occurredAt, fromD),
+        lte(schema.coworkEvents.occurredAt, toD),
+        sql`${schema.coworkEvents.userEmail} is not null`,
+        SVC_ANY
+      )
+    )
+    .groupBy(schema.coworkEvents.userEmail);
+
+  return rows
+    .filter((r): r is typeof r & { email: string } => !!r.email)
+    .map((r): CombinedMemberRow => {
+      const cowork = Number(r.coworkCost ?? 0);
+      const code = Number(r.codeCost ?? 0);
+      const coworkTokens = Number(r.coworkTokens ?? 0);
+      const codeTokens = Number(r.codeTokens ?? 0);
+      return {
+        email: r.email,
+        coworkCostCents: cowork,
+        codeCostCents: code,
+        totalCostCents: cowork + code,
+        coworkPrompts: Number(r.coworkPrompts ?? 0),
+        codePrompts: Number(r.codePrompts ?? 0),
+        coworkTokens,
+        codeTokens,
+        totalTokens: coworkTokens + codeTokens,
+        firstSeen: r.firstSeen ? String(r.firstSeen) : null,
+        lastSeen: r.lastSeen ? String(r.lastSeen) : null,
+      };
+    })
+    .sort((a, b) => b.totalCostCents - a.totalCostCents);
+}
+
+export async function combinedOverall(opts: { from?: Date; to?: Date }) {
+  if (PREVIEW) {
+    const co = mockCoworkOverall();
+    return {
+      uniqueUsers: co.uniqueUsers,
+      promptCount: co.promptCount,
+      coworkCostCents: Math.round(co.totalCostCents * 0.62),
+      codeCostCents: co.totalCostCents - Math.round(co.totalCostCents * 0.62),
+      totalCostCents: co.totalCostCents,
+      totalTokens: co.totalTokens,
+    };
+  }
+  const { fromD, toD } = rangeBounds(opts.from, opts.to);
+  const rows = await db
+    .select({
+      uniqueUsers: sql<number>`count(distinct ${schema.coworkEvents.userEmail})`,
+      promptCount: sql<number>`coalesce(sum(case when ${schema.coworkEvents.eventName} = 'user_prompt' then 1 else 0 end), 0)`,
+      coworkCost: sql<number>`coalesce(sum(case when ${SVC_COWORK} then ${schema.coworkEvents.costUsdCents} else 0 end), 0)`,
+      codeCost: sql<number>`coalesce(sum(case when ${SVC_CODE} then ${schema.coworkEvents.costUsdCents} else 0 end), 0)`,
+      totalTokens: sql<number>`coalesce(sum(coalesce(${schema.coworkEvents.inputTokens}, 0) + coalesce(${schema.coworkEvents.outputTokens}, 0)), 0)`,
+    })
+    .from(schema.coworkEvents)
+    .where(
+      and(
+        gte(schema.coworkEvents.occurredAt, fromD),
+        lte(schema.coworkEvents.occurredAt, toD),
+        SVC_ANY
+      )
+    );
+  const r = rows[0] ?? {
+    uniqueUsers: 0,
+    promptCount: 0,
+    coworkCost: 0,
+    codeCost: 0,
+    totalTokens: 0,
+  };
+  const cowork = Number(r.coworkCost ?? 0);
+  const code = Number(r.codeCost ?? 0);
+  return {
+    uniqueUsers: Number(r.uniqueUsers ?? 0),
+    promptCount: Number(r.promptCount ?? 0),
+    coworkCostCents: cowork,
+    codeCostCents: code,
+    totalCostCents: cowork + code,
+    totalTokens: Number(r.totalTokens ?? 0),
+  };
+}
+
 export async function coworkRecentEvents(opts: {
   limit?: number;
   service?: "cowork" | "claude-code";

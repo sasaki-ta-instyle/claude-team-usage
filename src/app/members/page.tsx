@@ -1,6 +1,7 @@
 import Link from "next/link";
 
-import { memberSummary, PREMIUM_COST_CENTS_DEFAULT } from "@/lib/queries";
+import { combinedMemberSummary } from "@/lib/cowork-queries";
+import { PREMIUM_COST_CENTS_DEFAULT } from "@/lib/queries";
 import { formatCost, formatTokens, isoDateMinusDays } from "@/lib/format";
 
 export const dynamic = "force-dynamic";
@@ -18,13 +19,16 @@ export default async function MembersPage(props: {
   const range = Math.max(1, Math.min(180, Number(days) || 30));
   const fromDate = isoDateMinusDays(range);
   const toDate = isoDateMinusDays(0);
-  const members = await memberSummary({ fromDate, toDate });
+  const from = new Date(`${fromDate}T00:00:00Z`);
+  const to = new Date();
+  const members = await combinedMemberSummary({ from, to });
 
   return (
     <>
       <h1 className="page-title">メンバー</h1>
       <p className="page-subtitle">
-        期間: <strong>{fromDate}</strong> – <strong>{toDate}</strong>。Claude Code をユーザー別 / 日次で集計。
+        期間: <strong>{fromDate}</strong> – <strong>{toDate}</strong>。
+        Cowork + Code（OTel push）の利用者を統合表示。閾値 $50 で Premium 候補判定。
       </p>
 
       <div className="flex-row" style={{ marginBottom: 16 }}>
@@ -42,7 +46,8 @@ export default async function MembersPage(props: {
       <div className="glass-panel">
         {members.length === 0 ? (
           <p className="muted">
-            データがありません。<code>/api/sync</code> を実行してください。
+            データがありません。Cowork admin の Monitoring か、メンバーの
+            Claude Code OTel 設定（<code>scripts/install-claude-code-otel.sh</code>）が必要です。
           </p>
         ) : (
           <div className="table-scroll">
@@ -50,44 +55,38 @@ export default async function MembersPage(props: {
               <thead>
                 <tr>
                   <th>メンバー</th>
-                  <th>seat 種別</th>
-                  <th className="num">トークン</th>
-                  <th className="num">推定コスト</th>
-                  <th className="num">セッション</th>
-                  <th className="num">commits</th>
-                  <th>候補 seat</th>
+                  <th className="num">Cowork プロンプト</th>
+                  <th className="num">Code プロンプト</th>
+                  <th className="num">Cowork コスト</th>
+                  <th className="num">Code コスト</th>
+                  <th className="num">合計コスト</th>
+                  <th className="num">合計トークン</th>
+                  <th>Premium 候補</th>
                 </tr>
               </thead>
               <tbody>
                 {members.map((m) => {
-                  const candidate =
-                    m.costCents >= PREMIUM_COST_CENTS_DEFAULT
-                      ? "premium"
-                      : "standard";
+                  const isPremium = m.totalCostCents >= PREMIUM_COST_CENTS_DEFAULT;
                   return (
                     <tr key={m.email}>
                       <td>
                         <Link href={`/members/${encodeURIComponent(m.email)}`}>
-                          {m.displayName ?? m.email}
-                        </Link>
-                        <div className="muted" style={{ fontSize: 11 }}>
                           {m.email}
-                        </div>
+                        </Link>
                       </td>
+                      <td className="num">{m.coworkPrompts.toLocaleString()}</td>
+                      <td className="num">{m.codePrompts.toLocaleString()}</td>
+                      <td className="num">{formatCost(m.coworkCostCents)}</td>
+                      <td className="num">{formatCost(m.codeCostCents)}</td>
+                      <td className="num">
+                        <strong>{formatCost(m.totalCostCents)}</strong>
+                      </td>
+                      <td className="num">{formatTokens(m.totalTokens)}</td>
                       <td>
                         <span
-                          className={`seat-badge seat-badge--${m.seatType ?? "null"}`}
+                          className={`seat-badge seat-badge--${isPremium ? "premium" : "standard"}`}
                         >
-                          {m.seatType ?? "未設定"}
-                        </span>
-                      </td>
-                      <td className="num">{formatTokens(m.tokens)}</td>
-                      <td className="num">{formatCost(m.costCents)}</td>
-                      <td className="num">{m.sessions.toLocaleString()}</td>
-                      <td className="num">{m.commits.toLocaleString()}</td>
-                      <td>
-                        <span className={`seat-badge seat-badge--${candidate}`}>
-                          {candidate}
+                          {isPremium ? "premium" : "standard"}
                         </span>
                       </td>
                     </tr>

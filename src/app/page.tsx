@@ -4,9 +4,10 @@ import { redirect } from "next/navigation";
 import { auth } from "@/lib/auth";
 import { PREVIEW } from "@/lib/preview";
 import {
-  memberSummary,
-  PREMIUM_COST_CENTS_DEFAULT,
-} from "@/lib/queries";
+  combinedMemberSummary,
+  combinedOverall,
+} from "@/lib/cowork-queries";
+import { PREMIUM_COST_CENTS_DEFAULT } from "@/lib/queries";
 import {
   formatCost,
   formatTokens,
@@ -17,8 +18,6 @@ import {
 export const dynamic = "force-dynamic";
 
 export default async function DashboardPage() {
-  // basePath root (/claude-team-usage) は middleware の matcher が拾わない
-  // ことがあるので、ページ側でも auth 必須チェックを置く。
   if (!PREVIEW) {
     const session = await auth().catch(() => null);
     if (!session?.user) redirect("/login");
@@ -26,23 +25,26 @@ export default async function DashboardPage() {
 
   const fromDate = monthStartIso();
   const toDate = isoDateMinusDays(0);
-  const members = await memberSummary({ fromDate, toDate });
+  const from = new Date(`${fromDate}T00:00:00Z`);
+  const to = new Date();
 
-  const totalMembers = members.length;
-  const totalTokens = members.reduce((a, m) => a + m.tokens, 0);
-  const totalCostCents = members.reduce((a, m) => a + m.costCents, 0);
+  const [overall, members] = await Promise.all([
+    combinedOverall({ from, to }),
+    combinedMemberSummary({ from, to }),
+  ]);
+
   const premiumCandidates = members.filter(
-    (m) => m.costCents >= PREMIUM_COST_CENTS_DEFAULT
+    (m) => m.totalCostCents >= PREMIUM_COST_CENTS_DEFAULT
   ).length;
 
-  const [costUsd, costJpy] = formatCost(totalCostCents).split(" / ");
+  const [costUsd, costJpy] = formatCost(overall.totalCostCents).split(" / ");
 
   return (
     <>
       <h1 className="page-title">概要</h1>
       <p className="page-subtitle">
         期間: <strong>{fromDate}</strong> – <strong>{toDate}</strong>（当月）。
-        Claude Code をユーザー別 / 日次で集計。
+        Cowork + Claude Code（OTel push）の合算。
       </p>
 
       <section className="kpi-hero-grid">
@@ -50,23 +52,23 @@ export default async function DashboardPage() {
           <p className="kpi-label">当月の推定コスト</p>
           <p className="kpi-value">{costUsd}</p>
           <p className="kpi-sub">
-            {costJpy} ・ Anthropic Admin API の rolling 値
+            {costJpy} ・ Cowork {formatCost(overall.coworkCostCents).split(" / ")[0]} ／ Code {formatCost(overall.codeCostCents).split(" / ")[0]}
           </p>
         </div>
         <div className="card">
           <p className="kpi-label">アクティブメンバー</p>
-          <p className="kpi-value">{totalMembers}</p>
-          <p className="kpi-sub">Claude Code を使用</p>
+          <p className="kpi-value">{overall.uniqueUsers}</p>
+          <p className="kpi-sub">Cowork または Code を使用</p>
         </div>
         <div className="card">
           <p className="kpi-label">合計トークン</p>
-          <p className="kpi-value">{formatTokens(totalTokens)}</p>
-          <p className="kpi-sub">input + output + cache</p>
+          <p className="kpi-value">{formatTokens(overall.totalTokens)}</p>
+          <p className="kpi-sub">input + output</p>
         </div>
         <div className="card">
           <p className="kpi-label">Premium 候補</p>
           <p className="kpi-value">{premiumCandidates}</p>
-          <p className="kpi-sub">閾値 $50 を超えたメンバー数</p>
+          <p className="kpi-sub">月コスト $50 以上のメンバー数</p>
         </div>
       </section>
 
@@ -80,7 +82,8 @@ export default async function DashboardPage() {
         </div>
         {members.length === 0 ? (
           <p className="muted">
-            まだ取り込みデータがありません。<code>/api/sync?source=all</code> を一度実行して初期化してください。
+            まだ取り込みデータがありません。Cowork admin の Monitoring か、
+            メンバーの Claude Code への OTel 設定が必要です。
           </p>
         ) : (
           <div className="table-scroll">
@@ -88,10 +91,10 @@ export default async function DashboardPage() {
               <thead>
                 <tr>
                   <th>メンバー</th>
-                  <th>seat 種別</th>
+                  <th className="num">Cowork コスト</th>
+                  <th className="num">Code コスト</th>
+                  <th className="num">合計コスト</th>
                   <th className="num">トークン</th>
-                  <th className="num">推定コスト</th>
-                  <th className="num">セッション</th>
                 </tr>
               </thead>
               <tbody>
@@ -99,20 +102,13 @@ export default async function DashboardPage() {
                   <tr key={m.email}>
                     <td>
                       <Link href={`/members/${encodeURIComponent(m.email)}`}>
-                        {m.displayName ?? m.email}
-                      </Link>
-                      <div className="muted" style={{ fontSize: 11 }}>
                         {m.email}
-                      </div>
+                      </Link>
                     </td>
-                    <td>
-                      <span className={`seat-badge seat-badge--${m.seatType ?? "null"}`}>
-                        {m.seatType ?? "未設定"}
-                      </span>
-                    </td>
-                    <td className="num">{formatTokens(m.tokens)}</td>
-                    <td className="num">{formatCost(m.costCents)}</td>
-                    <td className="num">{m.sessions.toLocaleString()}</td>
+                    <td className="num">{formatCost(m.coworkCostCents)}</td>
+                    <td className="num">{formatCost(m.codeCostCents)}</td>
+                    <td className="num"><strong>{formatCost(m.totalCostCents)}</strong></td>
+                    <td className="num">{formatTokens(m.totalTokens)}</td>
                   </tr>
                 ))}
               </tbody>
