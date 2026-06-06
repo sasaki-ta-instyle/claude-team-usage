@@ -3,6 +3,7 @@ import {
   date,
   integer,
   jsonb,
+  numeric,
   pgTable,
   primaryKey,
   serial,
@@ -121,6 +122,56 @@ export const messagesUsageDaily = pgTable(
   })
 );
 
+// コンソール API（console.anthropic.com）の従量課金実額。Anthropic Admin API の
+// Cost Report（/v1/organizations/cost_report, group_by[]=workspace_id,description）
+// を日次バケットで保存する。amount は Anthropic の請求実額で、cents の小数文字列で
+// 返るため精度を落とさないよう numeric（cents）でそのまま保持する。
+export const costReportDaily = pgTable(
+  "cost_report_daily",
+  {
+    date: date("date").notNull(),
+    workspaceId: text("workspace_id").notNull().default(""),
+    model: text("model").notNull().default(""),
+    costType: text("cost_type").notNull().default(""), // tokens | web_search | code_execution | session_usage
+    tokenType: text("token_type").notNull().default(""),
+    contextWindow: text("context_window").notNull().default(""),
+    serviceTier: text("service_tier").notNull().default(""),
+    inferenceGeo: text("inference_geo").notNull().default(""),
+    // 生の cents（小数あり）。$1.23 → "123" 系。表示時に /100 で USD 化。
+    amountCents: numeric("amount_cents").notNull().default("0"),
+    currency: text("currency").notNull().default("USD"),
+    updatedAt: timestamp("updated_at", { withTimezone: true })
+      .notNull()
+      .defaultNow(),
+  },
+  (t) => ({
+    pk: primaryKey({
+      columns: [
+        t.date,
+        t.workspaceId,
+        t.model,
+        t.costType,
+        t.tokenType,
+        t.contextWindow,
+        t.serviceTier,
+        t.inferenceGeo,
+      ],
+    }),
+  })
+);
+
+// Anthropic Organization の Workspace 一覧（Cost Report は id しか返さないので
+// 名前解決のためにキャッシュする）。
+export const workspaces = pgTable("workspaces", {
+  id: text("id").primaryKey(),
+  name: text("name"),
+  displayColor: text("display_color"),
+  archivedAt: timestamp("archived_at", { withTimezone: true }),
+  updatedAt: timestamp("updated_at", { withTimezone: true })
+    .notNull()
+    .defaultNow(),
+});
+
 // Cowork OpenTelemetry イベント（Cowork admin > Monitoring から push される
 // OTLP/HTTP logs を受信して保存）。
 export const coworkEvents = pgTable("cowork_events", {
@@ -162,4 +213,6 @@ export const syncLog = pgTable("sync_log", {
 export type User = typeof users.$inferSelect;
 export type CodeUsageDaily = typeof codeUsageDaily.$inferSelect;
 export type MessagesUsageDaily = typeof messagesUsageDaily.$inferSelect;
+export type CostReportDaily = typeof costReportDaily.$inferSelect;
+export type Workspace = typeof workspaces.$inferSelect;
 export type SyncLog = typeof syncLog.$inferSelect;

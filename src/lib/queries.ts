@@ -4,6 +4,11 @@ import { db, schema } from "@/db/client";
 import { isoDateMinusDays, monthStartIso } from "@/lib/format";
 import {
   PREVIEW,
+  mockApiCostByModel,
+  mockApiCostByType,
+  mockApiCostByWorkspace,
+  mockApiCostDailyTrend,
+  mockApiCostTotalCents,
   mockMembers,
   mockMemberDailyTrend,
   mockMessagesSummary,
@@ -164,5 +169,150 @@ export async function messagesUsageSummary(opts: {
     tokensOutput: Number(r.tokensOutput ?? 0),
     tokensCacheRead: Number(r.tokensCacheRead ?? 0),
     tokensCacheCreation: Number(r.tokensCacheCreation ?? 0),
+  }));
+}
+
+// ─── コンソール API 課金（Cost Report） ───
+// amount_cents は cents（小数あり）。集計結果はそのまま cents として既存の
+// formatUsd / formatJpyFromCents に渡せる（どちらも cents / 100 で USD 化）。
+
+export type ApiCostWorkspaceRow = {
+  workspaceId: string;
+  name: string;
+  costCents: number;
+};
+export type ApiCostBreakdownRow = { label: string; costCents: number };
+export type ApiCostTrendPoint = { date: string; costCents: number };
+
+const COST_SUM = sql<number>`coalesce(sum(${schema.costReportDaily.amountCents}), 0)`;
+
+export async function apiCostTotalCents(opts: {
+  fromDate?: string;
+  toDate?: string;
+}): Promise<number> {
+  if (PREVIEW) return mockApiCostTotalCents();
+  const fromDate = opts.fromDate ?? monthStartIso();
+  const toDate = opts.toDate ?? isoDateMinusDays(0);
+  const [row] = await db
+    .select({ total: COST_SUM })
+    .from(schema.costReportDaily)
+    .where(
+      and(
+        gte(schema.costReportDaily.date, fromDate),
+        lte(schema.costReportDaily.date, toDate)
+      )
+    );
+  return Number(row?.total ?? 0);
+}
+
+export async function apiCostByWorkspace(opts: {
+  fromDate?: string;
+  toDate?: string;
+}): Promise<ApiCostWorkspaceRow[]> {
+  if (PREVIEW) return mockApiCostByWorkspace();
+  const fromDate = opts.fromDate ?? monthStartIso();
+  const toDate = opts.toDate ?? isoDateMinusDays(0);
+  const rows = await db
+    .select({
+      workspaceId: schema.costReportDaily.workspaceId,
+      name: schema.workspaces.name,
+      costCents: COST_SUM,
+    })
+    .from(schema.costReportDaily)
+    .leftJoin(
+      schema.workspaces,
+      sql`${schema.costReportDaily.workspaceId} = ${schema.workspaces.id}`
+    )
+    .where(
+      and(
+        gte(schema.costReportDaily.date, fromDate),
+        lte(schema.costReportDaily.date, toDate)
+      )
+    )
+    .groupBy(schema.costReportDaily.workspaceId, schema.workspaces.name);
+
+  return rows
+    .map((r) => ({
+      workspaceId: r.workspaceId,
+      name: r.name ?? (r.workspaceId ? r.workspaceId : "default workspace"),
+      costCents: Number(r.costCents ?? 0),
+    }))
+    .sort((a, b) => b.costCents - a.costCents);
+}
+
+export async function apiCostByModel(opts: {
+  fromDate?: string;
+  toDate?: string;
+}): Promise<ApiCostBreakdownRow[]> {
+  if (PREVIEW) return mockApiCostByModel();
+  const fromDate = opts.fromDate ?? monthStartIso();
+  const toDate = opts.toDate ?? isoDateMinusDays(0);
+  const rows = await db
+    .select({ label: schema.costReportDaily.model, costCents: COST_SUM })
+    .from(schema.costReportDaily)
+    .where(
+      and(
+        gte(schema.costReportDaily.date, fromDate),
+        lte(schema.costReportDaily.date, toDate)
+      )
+    )
+    .groupBy(schema.costReportDaily.model);
+
+  return rows
+    .map((r) => ({
+      label: r.label || "—",
+      costCents: Number(r.costCents ?? 0),
+    }))
+    .sort((a, b) => b.costCents - a.costCents);
+}
+
+export async function apiCostByType(opts: {
+  fromDate?: string;
+  toDate?: string;
+}): Promise<ApiCostBreakdownRow[]> {
+  if (PREVIEW) return mockApiCostByType();
+  const fromDate = opts.fromDate ?? monthStartIso();
+  const toDate = opts.toDate ?? isoDateMinusDays(0);
+  const rows = await db
+    .select({ label: schema.costReportDaily.costType, costCents: COST_SUM })
+    .from(schema.costReportDaily)
+    .where(
+      and(
+        gte(schema.costReportDaily.date, fromDate),
+        lte(schema.costReportDaily.date, toDate)
+      )
+    )
+    .groupBy(schema.costReportDaily.costType);
+
+  return rows
+    .map((r) => ({
+      label: r.label || "—",
+      costCents: Number(r.costCents ?? 0),
+    }))
+    .sort((a, b) => b.costCents - a.costCents);
+}
+
+export async function apiCostDailyTrend(opts: {
+  fromDate?: string;
+  toDate?: string;
+}): Promise<ApiCostTrendPoint[]> {
+  if (PREVIEW) return mockApiCostDailyTrend();
+  const fromDate = opts.fromDate ?? monthStartIso();
+  const toDate = opts.toDate ?? isoDateMinusDays(0);
+  const rows = await db
+    .select({ date: schema.costReportDaily.date, costCents: COST_SUM })
+    .from(schema.costReportDaily)
+    .where(
+      and(
+        gte(schema.costReportDaily.date, fromDate),
+        lte(schema.costReportDaily.date, toDate)
+      )
+    )
+    .groupBy(schema.costReportDaily.date)
+    .orderBy(schema.costReportDaily.date);
+
+  return rows.map((r) => ({
+    date: String(r.date),
+    costCents: Number(r.costCents ?? 0),
   }));
 }

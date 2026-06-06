@@ -8,7 +8,7 @@ const NAV = [
   { href: "/members", label: "メンバー" },
   { href: "/cowork", label: "Cowork" },
   { href: "/code-otel", label: "Code (OTel)" },
-  { href: "/api-messages", label: "API Messages" },
+  { href: "/api-messages", label: "コンソール API" },
   { href: "/simulate", label: "配分シミュレーション" },
   { href: "/sync-log", label: "取り込み履歴" },
 ];

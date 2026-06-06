@@ -4,8 +4,10 @@ import { NextResponse } from "next/server";
 import { db, schema } from "@/db/client";
 import {
   fetchCodeUsage,
+  fetchCostReport,
   fetchMessagesUsage,
   fetchUsers,
+  fetchWorkspaces,
   type CodeUsageRow,
   type MessagesUsageRow,
   type OrganizationUser,
@@ -143,6 +145,69 @@ async function syncMessages(from: string, to: string): Promise<number> {
   return rows;
 }
 
+async function syncCost(from: string, to: string): Promise<number> {
+  let rows = 0;
+  for await (const bucket of fetchCostReport(from)) {
+    const day = bucket.starting_at.slice(0, 10);
+    if (day < from || day > to) continue;
+    for (const r of bucket.results ?? []) {
+      const amount = Number(r.amount ?? "0");
+      const mapped = {
+        date: day,
+        workspaceId: r.workspace_id ?? "",
+        model: r.model ?? "",
+        costType: r.cost_type ?? "",
+        tokenType: r.token_type ?? "",
+        contextWindow: r.context_window ?? "",
+        serviceTier: r.service_tier ?? "",
+        inferenceGeo: r.inference_geo ?? "",
+        amountCents: Number.isFinite(amount) ? String(amount) : "0",
+        currency: r.currency ?? "USD",
+      };
+      await db
+        .insert(schema.costReportDaily)
+        .values(mapped)
+        .onConflictDoUpdate({
+          target: [
+            schema.costReportDaily.date,
+            schema.costReportDaily.workspaceId,
+            schema.costReportDaily.model,
+            schema.costReportDaily.costType,
+            schema.costReportDaily.tokenType,
+            schema.costReportDaily.contextWindow,
+            schema.costReportDaily.serviceTier,
+            schema.costReportDaily.inferenceGeo,
+          ],
+          set: { ...mapped, updatedAt: sql`now()` },
+        });
+      rows++;
+    }
+  }
+  return rows;
+}
+
+async function syncWorkspaces(): Promise<number> {
+  let rows = 0;
+  for await (const w of fetchWorkspaces()) {
+    if (!w.id) continue;
+    const mapped = {
+      id: w.id,
+      name: w.name ?? null,
+      displayColor: w.display_color ?? null,
+      archivedAt: w.archived_at ? new Date(w.archived_at) : null,
+    };
+    await db
+      .insert(schema.workspaces)
+      .values(mapped)
+      .onConflictDoUpdate({
+        target: [schema.workspaces.id],
+        set: { ...mapped, updatedAt: sql`now()` },
+      });
+    rows++;
+  }
+  return rows;
+}
+
 async function syncUsers(): Promise<number> {
   let rows = 0;
   for await (const u of fetchUsers()) {
@@ -194,8 +259,14 @@ export async function GET(req: Request) {
   const to = isoDateMinusDays(0);
   const from = isoDateMinusDays(ROLLING_DAYS);
 
-  const targets =
-    source === "all" ? (["code", "messages", "users"] as const) : [source as "code" | "messages" | "users"];
+  type SyncTarget = "code" | "messages" | "cost" | "workspaces" | "users";
+  const targets: readonly SyncTarget[] =
+    source === "all"
+      ? (["code", "messages", "cost", "workspaces", "users"] as const)
+      : [source as SyncTarget];
+
+  // 日付レンジを持たない（全件取得型の）ソース。
+  const undated = (t: SyncTarget) => t === "users" || t === "workspaces";
 
   const summary: Record<string, { rows: number; status: string; error?: string; ms: number }> = {};
 
@@ -205,13 +276,15 @@ export async function GET(req: Request) {
       let rows = 0;
       if (t === "code") rows = await syncCode(from, to);
       else if (t === "messages") rows = await syncMessages(from, to);
+      else if (t === "cost") rows = await syncCost(from, to);
+      else if (t === "workspaces") rows = await syncWorkspaces();
       else if (t === "users") rows = await syncUsers();
       else throw new Error(`unknown source: ${t}`);
       const ms = Math.round(performance.now() - start);
       await logSync({
         source: t,
-        fromDate: t === "users" ? null : from,
-        toDate: t === "users" ? null : to,
+        fromDate: undated(t) ? null : from,
+        toDate: undated(t) ? null : to,
         rowsUpserted: rows,
         status: "ok",
         durationMs: ms,
@@ -222,8 +295,8 @@ export async function GET(req: Request) {
       const message = err instanceof Error ? err.message : String(err);
       await logSync({
         source: t,
-        fromDate: t === "users" ? null : from,
-        toDate: t === "users" ? null : to,
+        fromDate: undated(t) ? null : from,
+        toDate: undated(t) ? null : to,
         rowsUpserted: 0,
         status: "error",
         errorText: message,

@@ -84,6 +84,54 @@ export function mockMessagesSummary() {
   ];
 }
 
+// ─── コンソール API 課金（Cost Report）モック ───
+// costCents は cents（$1 = 100）。
+
+export function mockApiCostByWorkspace() {
+  return [
+    { workspaceId: "wrkspc_ig_builder", name: "ig-builder", costCents: 184_250 },
+    { workspaceId: "wrkspc_cpc_tools", name: "cpc-tools", costCents: 92_400 },
+    { workspaceId: "wrkspc_crhr", name: "crhr-recruit", costCents: 41_080 },
+    { workspaceId: "", name: "default workspace", costCents: 12_640 },
+  ];
+}
+
+export function mockApiCostByModel() {
+  return [
+    { label: "claude-opus-4-7", costCents: 198_400 },
+    { label: "claude-sonnet-4-6", costCents: 96_320 },
+    { label: "claude-haiku-4-5", costCents: 35_650 },
+  ];
+}
+
+export function mockApiCostByType() {
+  return [
+    { label: "tokens", costCents: 301_200 },
+    { label: "web_search", costCents: 21_400 },
+    { label: "code_execution", costCents: 7_770 },
+  ];
+}
+
+export function mockApiCostTotalCents() {
+  return mockApiCostByWorkspace().reduce((s, r) => s + r.costCents, 0);
+}
+
+export function mockApiCostDailyTrend() {
+  const today = new Date(Date.UTC(2026, 5, 2));
+  const out: Array<{ date: string; costCents: number }> = [];
+  const dailyAvg = Math.round(mockApiCostTotalCents() / 30);
+  for (let i = 29; i >= 0; i--) {
+    const d = new Date(today);
+    d.setUTCDate(d.getUTCDate() - i);
+    const wave = 1 + 0.5 * Math.sin((i / 30) * Math.PI * 2 + 1.3);
+    out.push({
+      date: d.toISOString().slice(0, 10),
+      costCents: Math.round(dailyAvg * wave),
+    });
+  }
+  return out;
+}
+
 export function mockSyncLog() {
   const now = new Date(Date.UTC(2026, 5, 2, 9, 0));
   return [

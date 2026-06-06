@@ -1,7 +1,105 @@
-import { messagesUsageSummary } from "@/lib/queries";
-import { formatTokens, isoDateMinusDays } from "@/lib/format";
+import Link from "next/link";
+
+import {
+  apiCostByModel,
+  apiCostByType,
+  apiCostByWorkspace,
+  apiCostDailyTrend,
+  apiCostTotalCents,
+  messagesUsageSummary,
+  type ApiCostBreakdownRow,
+} from "@/lib/queries";
+import {
+  centsToUsd,
+  formatCost,
+  formatTokens,
+  formatUsd,
+  isoDateMinusDays,
+} from "@/lib/format";
+import { CostTrendChart } from "./cost-trend-chart";
 
 export const dynamic = "force-dynamic";
+
+const PRESETS = [
+  { label: "過去 7 日", days: 7 },
+  { label: "過去 30 日", days: 30 },
+  { label: "過去 90 日", days: 90 },
+];
+
+const COST_TYPE_JA: Record<string, string> = {
+  tokens: "トークン",
+  web_search: "Web 検索",
+  code_execution: "コード実行",
+  session_usage: "セッション",
+};
+
+// 構成比つきの内訳テーブル（モデル別 / コスト種別で共用）。
+function BreakdownTable({
+  rows,
+  total,
+  labelHead,
+  renderLabel,
+}: {
+  rows: ApiCostBreakdownRow[];
+  total: number;
+  labelHead: string;
+  renderLabel?: (label: string) => string;
+}) {
+  if (rows.length === 0) {
+    return <p className="muted">データなし</p>;
+  }
+  return (
+    <div className="table-scroll">
+      <table className="usage-table">
+        <thead>
+          <tr>
+            <th>{labelHead}</th>
+            <th className="num">金額</th>
+            <th className="num">構成比</th>
+          </tr>
+        </thead>
+        <tbody>
+          {rows.map((r) => {
+            const share = total > 0 ? (r.costCents / total) * 100 : 0;
+            return (
+              <tr key={r.label}>
+                <td>{renderLabel ? renderLabel(r.label) : r.label}</td>
+                <td className="num">{formatUsd(r.costCents)}</td>
+                <td className="num">
+                  <span style={{ display: "inline-flex", alignItems: "center", gap: 8 }}>
+                    <span
+                      aria-hidden
+                      style={{
+                        display: "inline-block",
+                        width: 60,
+                        height: 6,
+                        borderRadius: 3,
+                        background: "rgba(53,54,45,0.10)",
+                        position: "relative",
+                        overflow: "hidden",
+                      }}
+                    >
+                      <span
+                        style={{
+                          position: "absolute",
+                          inset: 0,
+                          width: `${share}%`,
+                          background: "var(--chart-2, #D4772C)",
+                          borderRadius: 3,
+                        }}
+                      />
+                    </span>
+                    {share.toFixed(1)}%
+                  </span>
+                </td>
+              </tr>
+            );
+          })}
+        </tbody>
+      </table>
+    </div>
+  );
+}
 
 export default async function ApiMessagesPage(props: {
   searchParams: Promise<{ days?: string }>;
@@ -10,32 +108,151 @@ export default async function ApiMessagesPage(props: {
   const range = Math.max(1, Math.min(180, Number(days) || 30));
   const fromDate = isoDateMinusDays(range);
   const toDate = isoDateMinusDays(0);
-  const rows = await messagesUsageSummary({ fromDate, toDate });
+
+  const [totalCents, byWorkspace, byModel, byType, trend, rows] =
+    await Promise.all([
+      apiCostTotalCents({ fromDate, toDate }),
+      apiCostByWorkspace({ fromDate, toDate }),
+      apiCostByModel({ fromDate, toDate }),
+      apiCostByType({ fromDate, toDate }),
+      apiCostDailyTrend({ fromDate, toDate }),
+      messagesUsageSummary({ fromDate, toDate }),
+    ]);
+
+  const [totalUsd, totalJpy] = formatCost(totalCents).split(" / ");
+  const topModel = byModel[0]?.label ?? "—";
+  const trendData = trend.map((p) => ({
+    date: p.date,
+    costUsd: centsToUsd(p.costCents),
+  }));
 
   return (
     <>
-      <h1 className="page-title">API Messages</h1>
+      <h1 className="page-title">コンソール API</h1>
       <p className="page-subtitle">
         期間: <strong>{fromDate}</strong> – <strong>{toDate}</strong>。
-        Claude Code とは別系統。account × workspace × api_key × model 単位で集計。
+        console.anthropic.com 側の従量課金（Cost Report API の実課金額）を
+        プロジェクト（Workspace）別に集計。Team 座席費とは別系統。
       </p>
 
-      <div className="callout">
-        <strong>注意</strong>
-        <span>
-          Anthropic Admin API（Team プラン）は API Messages のユーザー別紐付けを返しません。
-          ここでは account / workspace / api_key 粒度までの集計のみ表示します。
-        </span>
+      <div className="flex-row" style={{ marginBottom: 16 }}>
+        {PRESETS.map((p) => (
+          <Link
+            key={p.days}
+            className={`btn${p.days === range ? " btn--quiet-active" : ""}`}
+            href={`/api-messages?days=${p.days}`}
+          >
+            {p.label}
+          </Link>
+        ))}
       </div>
 
-      {rows.length === 0 ? (
+      <section className="kpi-hero-grid">
+        <div className="kpi-hero">
+          <p className="kpi-label">期間合計コスト</p>
+          <p className="kpi-value">{totalUsd}</p>
+          <p className="kpi-sub">{totalJpy}</p>
+        </div>
+        <div className="card">
+          <p className="kpi-label">プロジェクト数</p>
+          <p className="kpi-value">{byWorkspace.length}</p>
+          <p className="kpi-sub">課金のある Workspace</p>
+        </div>
+        <div className="card">
+          <p className="kpi-label">最大支出モデル</p>
+          <p className="kpi-value" style={{ fontSize: 20 }}>{topModel}</p>
+          <p className="kpi-sub">
+            {byModel[0] ? formatUsd(byModel[0].costCents) : "—"}
+          </p>
+        </div>
+      </section>
+
+      <section className="glass-panel">
+        <h2 style={{ marginTop: 0, marginBottom: 16 }}>日次コスト推移</h2>
+        {trendData.length === 0 ? (
+          <p className="muted">
+            データがありません。<code>/api/sync?source=cost</code> を実行してください。
+          </p>
+        ) : (
+          <CostTrendChart data={trendData} />
+        )}
+      </section>
+
+      <section className="glass-panel">
+        <h2 style={{ marginTop: 0, marginBottom: 16 }}>プロジェクト（Workspace）別コスト</h2>
+        {byWorkspace.length === 0 ? (
+          <p className="muted">
+            データがありません。<code>/api/sync?source=cost</code> と
+            <code>?source=workspaces</code> を実行してください。
+          </p>
+        ) : (
+          <div className="table-scroll">
+            <table className="usage-table">
+              <thead>
+                <tr>
+                  <th>プロジェクト</th>
+                  <th className="num">金額 (USD / JPY)</th>
+                  <th className="num">構成比</th>
+                </tr>
+              </thead>
+              <tbody>
+                {byWorkspace.map((w) => {
+                  const share =
+                    totalCents > 0 ? (w.costCents / totalCents) * 100 : 0;
+                  return (
+                    <tr key={w.workspaceId || "default"}>
+                      <td>
+                        <div>{w.name}</div>
+                        {w.workspaceId ? (
+                          <div className="muted" style={{ fontSize: 11 }}>
+                            {w.workspaceId}
+                          </div>
+                        ) : null}
+                      </td>
+                      <td className="num">
+                        <strong>{formatCost(w.costCents)}</strong>
+                      </td>
+                      <td className="num">{share.toFixed(1)}%</td>
+                    </tr>
+                  );
+                })}
+              </tbody>
+            </table>
+          </div>
+        )}
+      </section>
+
+      <section className="kpi-grid" style={{ gridTemplateColumns: "1fr 1fr", display: "grid", gap: 16 }}>
         <div className="glass-panel">
+          <h2 style={{ marginTop: 0, marginBottom: 16 }}>モデル別</h2>
+          <BreakdownTable rows={byModel} total={totalCents} labelHead="モデル" />
+        </div>
+        <div className="glass-panel">
+          <h2 style={{ marginTop: 0, marginBottom: 16 }}>コスト種別</h2>
+          <BreakdownTable
+            rows={byType}
+            total={totalCents}
+            labelHead="種別"
+            renderLabel={(l) => COST_TYPE_JA[l] ?? l}
+          />
+        </div>
+      </section>
+
+      <section className="glass-panel">
+        <h2 style={{ marginTop: 0, marginBottom: 8 }}>トークン明細</h2>
+        <div className="callout" style={{ marginBottom: 16 }}>
+          <strong>注意</strong>
+          <span>
+            こちらは <code>usage_report/messages</code> のトークン集計（金額ではなく数量）。
+            account / workspace / api_key / model 粒度。ユーザー別の紐付けは Team プランでは返りません。
+          </span>
+        </div>
+
+        {rows.length === 0 ? (
           <p className="muted">
             データがありません。<code>/api/sync?source=messages</code> を実行してください。
           </p>
-        </div>
-      ) : (
-        <div className="glass-panel">
+        ) : (
           <div className="table-scroll">
             <table className="usage-table">
               <thead>
@@ -94,8 +311,8 @@ export default async function ApiMessagesPage(props: {
               </tbody>
             </table>
           </div>
-        </div>
-      )}
+        )}
+      </section>
     </>
   );
 }

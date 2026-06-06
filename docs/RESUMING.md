@@ -189,7 +189,8 @@ GitHub Actions 失敗時は workflow が自動ロールバックする。
 
 | # | 内容 | 状態 |
 |---|---|---|
-|  |  |  |
+| 1 | `/api-messages` にコンソール API 実課金（Cost Report）の可視化を追加。Workspace別 / 日次推移 / モデル別 / コスト種別。新テーブル `cost_report_daily` + `workspaces`（migration `0002`）、sync `source=cost\|workspaces`（`source=all` に内包＝cron 変更不要） | 実装済（本番反映時に migration 適用 → 初回 `?source=cost` 取り込み必要） |
+| 2 | 残りクレジット（プリペイド残高）表示 | 見送り（Admin API で取得不可） |
 
 ---
 

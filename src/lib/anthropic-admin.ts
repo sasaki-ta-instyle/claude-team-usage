@@ -105,6 +105,31 @@ export type OrganizationUser = {
   seat_type?: "claude_team_premium" | "claude_team_standard" | string | null;
 };
 
+// Cost Report（実課金額）: data[].results[] の各要素。
+export type CostReportBucket = {
+  starting_at: string; // RFC 3339
+  ending_at?: string;
+  results: Array<{
+    amount?: string; // cents の小数文字列。例 "123.78912"
+    currency?: string; // "USD"
+    workspace_id?: string | null;
+    model?: string | null;
+    cost_type?: "tokens" | "web_search" | "code_execution" | "session_usage" | null;
+    token_type?: string | null;
+    context_window?: string | null;
+    service_tier?: "standard" | "batch" | null;
+    inference_geo?: string | null;
+  }>;
+};
+
+export type Workspace = {
+  id: string;
+  type?: "workspace";
+  name?: string;
+  display_color?: string;
+  archived_at?: string | null;
+};
+
 // ─── Fetchers ───
 
 export async function* fetchCodeUsage(startingAt: string) {
@@ -134,6 +159,29 @@ export async function* fetchMessagesUsage(startingAt: string) {
 export async function* fetchUsers() {
   for await (const row of paginate<OrganizationUser>(
     "/v1/organizations/users?limit=100"
+  )) {
+    yield row;
+  }
+}
+
+export async function* fetchCostReport(startingAt: string) {
+  const params = new URLSearchParams({
+    starting_at: startingAt,
+    bucket_width: "1d",
+  });
+  // workspace と description（model / token_type / cost_type 等）で分解する。
+  ["workspace_id", "description"].forEach((g) =>
+    params.append("group_by[]", g)
+  );
+  const path = `/v1/organizations/cost_report?${params.toString()}`;
+  for await (const row of paginate<CostReportBucket>(path)) {
+    yield row;
+  }
+}
+
+export async function* fetchWorkspaces() {
+  for await (const row of paginate<Workspace>(
+    "/v1/organizations/workspaces?limit=1000&include_archived=true"
   )) {
     yield row;
   }
