@@ -353,6 +353,12 @@ textarea {
 .usage-table tbody tr:hover {
   background: rgba(255, 255, 255, 0.32);
 }
+.usage-table tbody tr.row-warn {
+  background: rgba(237, 221, 200, 0.45); /* badge-warning と同系の薄色 */
+}
+.usage-table tbody tr.row-warn:hover {
+  background: rgba(237, 221, 200, 0.65);
+}
 .usage-table td.num,
 .usage-table th.num {
   text-align: right;

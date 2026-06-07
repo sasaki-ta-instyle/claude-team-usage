@@ -1,7 +1,7 @@
 import Link from "next/link";
 
 import { combinedMemberSummary } from "@/lib/cowork-queries";
-import { PREMIUM_COST_CENTS_DEFAULT } from "@/lib/queries";
+import { recommendSeat, SEAT_RECO_META } from "@/lib/seat-recommendation";
 import { formatCost, formatTokens, isoDateMinusDays } from "@/lib/format";
 
 export const dynamic = "force-dynamic";
@@ -28,7 +28,9 @@ export default async function MembersPage(props: {
       <h1 className="page-title">メンバー</h1>
       <p className="page-subtitle">
         期間: <strong>{fromDate}</strong> – <strong>{toDate}</strong>。
-        Cowork + Code（OTel push）の利用者を統合表示。閾値 $50 で Premium 候補判定。
+        Cowork + Code（OTel push）の利用者を統合表示。推奨 seat は
+        <strong>Code 利用 = Premium 必須</strong> / <strong>Cowork ≥ $100 = Premium 推奨</strong> /
+        <strong>月 &lt; $10 = API 直渡し候補</strong> / それ以外 = Standard 維持 の 4 分類。
       </p>
 
       <div className="flex-row" style={{ marginBottom: 16 }}>
@@ -61,14 +63,16 @@ export default async function MembersPage(props: {
                   <th className="num">Code コスト</th>
                   <th className="num">合計コスト</th>
                   <th className="num">合計トークン</th>
-                  <th>Premium 候補</th>
+                  <th>推奨 seat</th>
                 </tr>
               </thead>
               <tbody>
                 {members.map((m) => {
-                  const isPremium = m.totalCostCents >= PREMIUM_COST_CENTS_DEFAULT;
+                  const reco = recommendSeat(m);
+                  const meta = SEAT_RECO_META[reco];
+                  const isApiDirect = reco === "api_direct_candidate";
                   return (
-                    <tr key={m.email}>
+                    <tr key={m.email} className={isApiDirect ? "row-warn" : undefined}>
                       <td>
                         <Link href={`/members/${encodeURIComponent(m.email)}`}>
                           {m.email}
@@ -83,11 +87,12 @@ export default async function MembersPage(props: {
                       </td>
                       <td className="num">{formatTokens(m.totalTokens)}</td>
                       <td>
-                        <span
-                          className={`badge ${isPremium ? "badge-success" : "badge-info"}`}
-                        >
-                          {isPremium ? "premium" : "standard"}
-                        </span>
+                        <span className={`badge ${meta.badge}`}>{meta.label}</span>
+                        {meta.helper ? (
+                          <div className="muted" style={{ fontSize: 11, marginTop: 2 }}>
+                            {meta.helper}
+                          </div>
+                        ) : null}
                       </td>
                     </tr>
                   );

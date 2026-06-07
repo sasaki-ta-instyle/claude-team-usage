@@ -7,7 +7,8 @@ import {
   combinedMemberSummary,
   combinedOverall,
 } from "@/lib/cowork-queries";
-import { PREMIUM_COST_CENTS_DEFAULT } from "@/lib/queries";
+import { usersRoster } from "@/lib/queries";
+import { recommendSeat } from "@/lib/seat-recommendation";
 import {
   formatCost,
   formatTokens,
@@ -28,14 +29,26 @@ export default async function DashboardPage() {
   const from = new Date(`${fromDate}T00:00:00Z`);
   const to = new Date();
 
-  const [overall, members] = await Promise.all([
+  const [overall, members, roster] = await Promise.all([
     combinedOverall({ from, to }),
     combinedMemberSummary({ from, to }),
+    usersRoster(),
   ]);
 
-  const premiumCandidates = members.filter(
-    (m) => m.totalCostCents >= PREMIUM_COST_CENTS_DEFAULT
-  ).length;
+  const recoCounts = {
+    premium_required: 0,
+    premium_recommended: 0,
+    standard: 0,
+    api_direct_candidate: 0,
+    unused: 0,
+  };
+  const memberByEmail = new Map(members.map((m) => [m.email.toLowerCase(), m]));
+  for (const m of members) recoCounts[recommendSeat(m)]++;
+  // シート保有者で当月イベント 0 の人は events 集計に出てこないので、
+  // roster と突き合わせて未使用にカウントする。
+  for (const u of roster) {
+    if (!memberByEmail.has(u.email)) recoCounts.unused++;
+  }
 
   const [costUsd, costJpy] = formatCost(overall.totalCostCents).split(" / ");
 
@@ -66,9 +79,32 @@ export default async function DashboardPage() {
           <p className="kpi-sub">input + output</p>
         </div>
         <div className="card">
-          <p className="kpi-label">Premium 候補</p>
-          <p className="kpi-value">{premiumCandidates}</p>
-          <p className="kpi-sub">月コスト $50 以上のメンバー数</p>
+          <p className="kpi-label">Premium 必須</p>
+          <p className="kpi-value">{recoCounts.premium_required}</p>
+          <p className="kpi-sub">Code 利用あり</p>
+        </div>
+      </section>
+
+      <section className="kpi-hero-grid" style={{ marginTop: 16 }}>
+        <div className="card">
+          <p className="kpi-label">Premium 推奨</p>
+          <p className="kpi-value">{recoCounts.premium_recommended}</p>
+          <p className="kpi-sub">Cowork ≥ $100</p>
+        </div>
+        <div className="card">
+          <p className="kpi-label">Standard 維持</p>
+          <p className="kpi-value">{recoCounts.standard}</p>
+          <p className="kpi-sub">$25 で足りる</p>
+        </div>
+        <div className="card">
+          <p className="kpi-label">API 直渡し候補</p>
+          <p className="kpi-value">{recoCounts.api_direct_candidate}</p>
+          <p className="kpi-sub">月 &lt; $10（pay-as-you-go の方が安い）</p>
+        </div>
+        <div className="card">
+          <p className="kpi-label">未使用</p>
+          <p className="kpi-value">{recoCounts.unused}</p>
+          <p className="kpi-sub">プロンプト 0（シート停止検討）</p>
         </div>
       </section>
 

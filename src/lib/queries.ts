@@ -16,7 +16,32 @@ import {
   mockUser,
 } from "@/lib/preview";
 
-export const PREMIUM_COST_CENTS_DEFAULT = 5000; // $50.00
+export type UserRosterEntry = {
+  email: string;
+  displayName: string | null;
+  seatType: string | null;
+  isAdmin: boolean;
+};
+
+// users テーブルの全件（Anthropic Admin API sync?source=users で投入される
+// シート保有者の正本）。/ ページの「未使用」KPI と /simulate の現在 seat 比較で使う。
+export async function usersRoster(): Promise<UserRosterEntry[]> {
+  if (PREVIEW) {
+    return mockMembers().map((m) => ({
+      email: m.email,
+      displayName: m.displayName,
+      seatType: m.seatType,
+      isAdmin: m.isAdmin,
+    }));
+  }
+  const rows = await db.select().from(schema.users);
+  return rows.map((u) => ({
+    email: u.email.toLowerCase(),
+    displayName: u.displayName ?? u.name ?? null,
+    seatType: u.seatType ?? null,
+    isAdmin: u.isAdmin ?? false,
+  }));
+}
 
 export type MemberRow = {
   email: string;
