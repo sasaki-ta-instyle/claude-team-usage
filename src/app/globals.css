@@ -178,12 +178,12 @@ textarea {
   backdrop-filter: none;
   border: 1px solid transparent;
 }
-.badge-default { background: #E9E7E1; color: var(--color-text-muted); border-color: #DCDAD2; }
-.badge-success { background: #DEF2E6; color: #15803D;                  border-color: #C7E9D4; }
-.badge-warning { background: #FAECDC; color: #B45309;                  border-color: #F6DEC3; }
-.badge-error   { background: #F8E5E6; color: #B91C1C;                  border-color: #F2D0D1; }
-.badge-info    { background: #E5ECFD; color: #1D4ED8;                  border-color: #CFDDFB; }
-.badge-accent  { background: #DCDCDA; color: var(--color-text);        border-color: #CECDC4; }
+.badge-default { background: #D7D3C5; color: var(--color-text-muted); border-color: #B5AE96; }
+.badge-success { background: #BFE6CC; color: #15803D;                  border-color: #8DCCA8; }
+.badge-warning { background: #F4D5AE; color: #B45309;                  border-color: #E2AC74; }
+.badge-error   { background: #F4C7CA; color: #B91C1C;                  border-color: #DF8E92; }
+.badge-info    { background: #C8D4F8; color: #1D4ED8;                  border-color: #97AFEE; }
+.badge-accent  { background: #C7C7C2; color: var(--color-text);        border-color: #A6A59A; }
 
 .callout {
   display: flex;
