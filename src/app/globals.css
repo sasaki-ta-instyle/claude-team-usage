@@ -179,10 +179,10 @@ textarea {
   border: 1px solid transparent;
 }
 .badge-default { background: #E1DDD0; color: var(--color-text-muted); border-color: #B5AE96; }
-.badge-success { background: #D0EDD9; color: #15803D;                  border-color: #8DCCA8; }
-.badge-warning { background: #F7E0C0; color: #B45309;                  border-color: #E2AC74; }
-.badge-error   { background: #F6D5D8; color: #B91C1C;                  border-color: #DF8E92; }
-.badge-info    { background: #D8E0FA; color: #1D4ED8;                  border-color: #97AFEE; }
+.badge-success { background: #D8E5DC; color: #15803D;                  border-color: #9FB9AB; }
+.badge-warning { background: #EDDDC8; color: #B45309;                  border-color: #C9AD92; }
+.badge-error   { background: #E8D8DA; color: #B91C1C;                  border-color: #C2A1A3; }
+.badge-info    { background: #DBDFEA; color: #1D4ED8;                  border-color: #A8B0C2; }
 .badge-accent  { background: #D2D2CE; color: var(--color-text);        border-color: #A6A59A; }
 
 .callout {
