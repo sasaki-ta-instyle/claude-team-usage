@@ -273,6 +273,77 @@ export async function combinedOverall(opts: { from?: Date; to?: Date }) {
   };
 }
 
+// ─── 日次稼働シグナル ─────────────────────────────────────────
+// rate limit reset（5 時間 rolling）は per-user カラムが取れないので、
+// 「日次のアクティビティ密度」と「api_error 回数」で cap 到達を間接的に検知する。
+
+export type MemberActivitySignals = {
+  activeDays: number;
+  maxDayCostCents: number;
+  apiErrorCount: number;
+};
+
+export async function memberActivitySignals(opts: {
+  from?: Date;
+  to?: Date;
+}): Promise<Map<string, MemberActivitySignals>> {
+  const out = new Map<string, MemberActivitySignals>();
+  if (PREVIEW) {
+    // モック: 既存 cowork mock の promptCount からそれっぽい値を生成
+    for (const m of COWORK_MOCK_MEMBERS) {
+      const promptCount = m.promptCount;
+      const activeDays = Math.min(30, Math.max(1, Math.round(promptCount / 8)));
+      const maxDayCostCents = Math.round(m.totalCostCents / Math.max(1, activeDays) * 1.6);
+      out.set(m.email.toLowerCase(), {
+        activeDays,
+        maxDayCostCents,
+        apiErrorCount: m.apiErrorCount,
+      });
+    }
+    return out;
+  }
+  const { fromD, toD } = rangeBounds(opts.from, opts.to);
+  // 2 段集計: per-day 合計 → user で MAX / COUNT / SUM
+  const perDay = db.$with("per_day").as(
+    db
+      .select({
+        email: schema.coworkEvents.userEmail,
+        day: sql<string>`date(${schema.coworkEvents.occurredAt})`.as("day"),
+        dayCents: sql<number>`coalesce(sum(${schema.coworkEvents.costUsdCents}), 0)`.as("day_cents"),
+        errors: sql<number>`coalesce(sum(case when ${schema.coworkEvents.eventName} = 'api_error' then 1 else 0 end), 0)`.as("errors"),
+      })
+      .from(schema.coworkEvents)
+      .where(
+        and(
+          gte(schema.coworkEvents.occurredAt, fromD),
+          lte(schema.coworkEvents.occurredAt, toD),
+          sql`${schema.coworkEvents.userEmail} is not null`,
+          SVC_ANY
+        )
+      )
+      .groupBy(schema.coworkEvents.userEmail, sql`date(${schema.coworkEvents.occurredAt})`)
+  );
+  const rows = await db
+    .with(perDay)
+    .select({
+      email: perDay.email,
+      activeDays: sql<number>`count(*)`,
+      maxDayCents: sql<number>`coalesce(max(${perDay.dayCents}), 0)`,
+      errorTotal: sql<number>`coalesce(sum(${perDay.errors}), 0)`,
+    })
+    .from(perDay)
+    .groupBy(perDay.email);
+  for (const r of rows) {
+    if (!r.email) continue;
+    out.set(r.email.toLowerCase(), {
+      activeDays: Number(r.activeDays ?? 0),
+      maxDayCostCents: Number(r.maxDayCents ?? 0),
+      apiErrorCount: Number(r.errorTotal ?? 0),
+    });
+  }
+  return out;
+}
+
 export async function coworkRecentEvents(opts: {
   limit?: number;
   service?: "cowork" | "claude-code";

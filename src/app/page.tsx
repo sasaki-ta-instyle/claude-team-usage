@@ -36,8 +36,7 @@ export default async function DashboardPage() {
   ]);
 
   const recoCounts = {
-    premium_required: 0,
-    premium_recommended: 0,
+    premium: 0,
     standard: 0,
     api_direct_candidate: 0,
     unused: 0,
@@ -79,22 +78,17 @@ export default async function DashboardPage() {
           <p className="kpi-sub">input + output</p>
         </div>
         <div className="card">
-          <p className="kpi-label">Premium 必須</p>
-          <p className="kpi-value">{recoCounts.premium_required}</p>
-          <p className="kpi-sub">Code 利用あり</p>
+          <p className="kpi-label">Premium 推奨</p>
+          <p className="kpi-value">{recoCounts.premium}</p>
+          <p className="kpi-sub">月 ≥ $100</p>
         </div>
       </section>
 
       <section className="kpi-hero-grid" style={{ marginTop: 16 }}>
         <div className="card">
-          <p className="kpi-label">Premium 推奨</p>
-          <p className="kpi-value">{recoCounts.premium_recommended}</p>
-          <p className="kpi-sub">Cowork ≥ $100</p>
-        </div>
-        <div className="card">
           <p className="kpi-label">Standard 維持</p>
           <p className="kpi-value">{recoCounts.standard}</p>
-          <p className="kpi-sub">$25 で足りる</p>
+          <p className="kpi-sub">$10 – $100</p>
         </div>
         <div className="card">
           <p className="kpi-label">API 直渡し候補</p>

@@ -48,7 +48,6 @@ export function Simulator({
   jpyPerUsd: number;
 }) {
   const [threshold, setThreshold] = useState<number>(DEFAULT_THRESHOLD);
-  const [codeForcesPremium, setCodeForcesPremium] = useState<boolean>(true);
   const [treatApiDirectAsZero, setTreatApiDirectAsZero] = useState<boolean>(true);
 
   const fmtJpy = (usd: number) =>
@@ -75,7 +74,7 @@ export function Simulator({
           codePrompts: m.codePrompts,
         },
         thresholdCents,
-        { codeForcesPremium, treatApiDirectAsZero }
+        { treatApiDirectAsZero }
       );
       const planCost = seatMonthlyUsd(reco);
       const currentCost =
@@ -94,8 +93,7 @@ export function Simulator({
     });
 
     const counts: Record<SeatRecommendation, number> = {
-      premium_required: 0,
-      premium_recommended: 0,
+      premium: 0,
       standard: 0,
       api_direct_candidate: 0,
       unused: 0,
@@ -108,7 +106,7 @@ export function Simulator({
     return {
       rows: rows.sort((a, b) => b.costCents - a.costCents),
       counts,
-      premiumCount: counts.premium_required + counts.premium_recommended,
+      premiumCount: counts.premium,
       standardCount: counts.standard,
       apiDirectCount: counts.api_direct_candidate,
       unusedCount: counts.unused,
@@ -116,7 +114,7 @@ export function Simulator({
       totalCurrentCost,
       deltaUsd: totalPlanCost - totalCurrentCost,
     };
-  }, [members, threshold, codeForcesPremium, treatApiDirectAsZero]);
+  }, [members, threshold, treatApiDirectAsZero]);
 
   return (
     <>
@@ -215,19 +213,6 @@ export function Simulator({
           <label style={{ display: "flex", alignItems: "center", gap: 8 }}>
             <input
               type="checkbox"
-              checked={codeForcesPremium}
-              onChange={(e) => setCodeForcesPremium(e.target.checked)}
-            />
-            <span>
-              <strong>Code 利用者は閾値を無視して Premium に倒す</strong>
-              <span className="muted" style={{ marginLeft: 8, fontSize: 11 }}>
-                Standard プランでは Claude Code が使えない前提
-              </span>
-            </span>
-          </label>
-          <label style={{ display: "flex", alignItems: "center", gap: 8 }}>
-            <input
-              type="checkbox"
               checked={treatApiDirectAsZero}
               onChange={(e) => setTreatApiDirectAsZero(e.target.checked)}
             />
@@ -248,7 +233,7 @@ export function Simulator({
           <p className="kpi-sub">{fmtJpy(computed.totalPlanCost)}</p>
         </div>
         <div className="card">
-          <p className="kpi-label">Premium 候補（必須 + 推奨）</p>
+          <p className="kpi-label">Premium 候補</p>
           <p className="kpi-value">{computed.premiumCount}</p>
           <p className="kpi-sub">@ $125/月</p>
         </div>

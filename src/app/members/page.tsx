@@ -1,6 +1,6 @@
 import Link from "next/link";
 
-import { combinedMemberSummary } from "@/lib/cowork-queries";
+import { combinedMemberSummary, memberActivitySignals } from "@/lib/cowork-queries";
 import { recommendSeat, SEAT_RECO_META } from "@/lib/seat-recommendation";
 import { formatCost, formatTokens, isoDateMinusDays } from "@/lib/format";
 
@@ -12,6 +12,8 @@ const PRESETS = [
   { label: "過去 90 日", days: 90 },
 ];
 
+const HIGH_ACTIVITY_DAYS = 15;
+
 export default async function MembersPage(props: {
   searchParams: Promise<{ days?: string }>;
 }) {
@@ -21,16 +23,20 @@ export default async function MembersPage(props: {
   const toDate = isoDateMinusDays(0);
   const from = new Date(`${fromDate}T00:00:00Z`);
   const to = new Date();
-  const members = await combinedMemberSummary({ from, to });
+  const [members, signals] = await Promise.all([
+    combinedMemberSummary({ from, to }),
+    memberActivitySignals({ from, to }),
+  ]);
 
   return (
     <>
       <h1 className="page-title">メンバー</h1>
       <p className="page-subtitle">
         期間: <strong>{fromDate}</strong> – <strong>{toDate}</strong>。
-        Cowork + Code（OTel push）の利用者を統合表示。推奨 seat は
-        <strong>Code 利用 = Premium 必須</strong> / <strong>Cowork ≥ $100 = Premium 推奨</strong> /
-        <strong>月 &lt; $10 = API 直渡し候補</strong> / それ以外 = Standard 維持 の 4 分類。
+        Cowork + Code（OTel push）の合算コストで判定。
+        <strong>月 ≥ $100 = Premium 推奨</strong> / <strong>$10 – $100 = Standard 維持</strong> /
+        <strong>月 &lt; $10 = API 直渡し候補</strong> / プロンプト 0 = 未使用。
+        副バッジで <strong>cap 到達</strong>（api_error 観測）/ <strong>高稼働</strong>（≥ {HIGH_ACTIVITY_DAYS} 日アクティブ）を表示。
       </p>
 
       <div className="flex-row" style={{ marginBottom: 16 }}>
@@ -62,7 +68,9 @@ export default async function MembersPage(props: {
                   <th className="num">Cowork コスト</th>
                   <th className="num">Code コスト</th>
                   <th className="num">合計コスト</th>
-                  <th className="num">合計トークン</th>
+                  <th className="num">稼働日</th>
+                  <th className="num">最大日コスト</th>
+                  <th className="num">api_error</th>
                   <th>推奨 seat</th>
                 </tr>
               </thead>
@@ -71,6 +79,12 @@ export default async function MembersPage(props: {
                   const reco = recommendSeat(m);
                   const meta = SEAT_RECO_META[reco];
                   const isApiDirect = reco === "api_direct_candidate";
+                  const sig = signals.get(m.email.toLowerCase());
+                  const activeDays = sig?.activeDays ?? 0;
+                  const maxDayCostCents = sig?.maxDayCostCents ?? 0;
+                  const apiErrorCount = sig?.apiErrorCount ?? 0;
+                  const isCapped = apiErrorCount > 0;
+                  const isHighActivity = activeDays >= HIGH_ACTIVITY_DAYS;
                   return (
                     <tr key={m.email} className={isApiDirect ? "row-warn" : undefined}>
                       <td>
@@ -85,12 +99,33 @@ export default async function MembersPage(props: {
                       <td className="num">
                         <strong>{formatCost(m.totalCostCents)}</strong>
                       </td>
-                      <td className="num">{formatTokens(m.totalTokens)}</td>
+                      <td className="num">{activeDays}</td>
+                      <td className="num">{formatCost(maxDayCostCents)}</td>
+                      <td
+                        className="num"
+                        style={isCapped ? { color: "var(--color-warning)", fontWeight: 600 } : undefined}
+                      >
+                        {apiErrorCount}
+                      </td>
                       <td>
                         <span className={`badge ${meta.badge}`}>{meta.label}</span>
                         {meta.helper ? (
                           <div className="muted" style={{ fontSize: 11, marginTop: 2 }}>
                             {meta.helper}
+                          </div>
+                        ) : null}
+                        {(isCapped || isHighActivity) ? (
+                          <div style={{ marginTop: 4, display: "flex", gap: 4, flexWrap: "wrap" }}>
+                            {isCapped ? (
+                              <span className="badge badge-warning" title="api_error が観測 = cap 到達の可能性">
+                                cap 到達
+                              </span>
+                            ) : null}
+                            {isHighActivity ? (
+                              <span className="badge badge-accent" title={`過去 ${range} 日のうち ${activeDays} 日アクティブ`}>
+                                高稼働
+                              </span>
+                            ) : null}
                           </div>
                         ) : null}
                       </td>
