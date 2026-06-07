@@ -31,7 +31,7 @@ export const SEAT_RECO_META: Record<
     helper: "$10 – $100",
   },
   api_direct_candidate: {
-    label: "API 直渡し候補",
+    label: "API 従量候補",
     badge: "badge-warning",
     helper: "月 < $10",
   },
@@ -60,7 +60,7 @@ export function recommendSeat(input: SeatRecoInput): SeatRecommendation {
   return "standard";
 }
 
-// シミュレータ用：閾値を可変にし、API 直渡し候補をシート集計から外すかを切り替える。
+// シミュレータ用：閾値を可変にし、API 従量候補をシート集計から外すかを切り替える。
 export function recommendSeatForSimulator(
   input: SeatRecoInput,
   thresholdCents: number,
@@ -81,7 +81,7 @@ export function recommendSeatForSimulator(
 }
 
 // シート単価（月額 USD）。api_direct_candidate と unused は 0 を返して
-// 「シート 1 つ削減して API 直契約 / 停止に切り出した」想定で集計する。
+// 「シート 1 つ削減して API 従量契約 / 停止に切り出した」想定で集計する。
 export function seatMonthlyUsd(reco: SeatRecommendation): number {
   switch (reco) {
     case "premium":

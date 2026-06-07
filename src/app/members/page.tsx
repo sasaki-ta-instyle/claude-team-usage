@@ -35,7 +35,7 @@ export default async function MembersPage(props: {
         期間: <strong>{fromDate}</strong> – <strong>{toDate}</strong>。
         Cowork + Code（OTel push）の合算コストで判定。
         <strong>月 ≥ $100 = Premium 推奨</strong> / <strong>$10 – $100 = Standard 維持</strong> /
-        <strong>月 &lt; $10 = API 直渡し候補</strong> / プロンプト 0 = 未使用。
+        <strong>月 &lt; $10 = API 従量候補</strong> / プロンプト 0 = 未使用。
         副バッジで <strong>cap 到達</strong>（api_error 観測）/ <strong>高稼働</strong>（≥ {HIGH_ACTIVITY_DAYS} 日アクティブ）を表示。
       </p>
 

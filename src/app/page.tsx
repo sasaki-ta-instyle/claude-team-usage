@@ -91,7 +91,7 @@ export default async function DashboardPage() {
           <p className="kpi-sub">$10 – $100</p>
         </div>
         <div className="card">
-          <p className="kpi-label">API 直渡し候補</p>
+          <p className="kpi-label">API 従量候補</p>
           <p className="kpi-value">{recoCounts.api_direct_candidate}</p>
           <p className="kpi-sub">月 &lt; $10（pay-as-you-go の方が安い）</p>
         </div>

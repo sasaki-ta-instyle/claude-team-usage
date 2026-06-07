@@ -177,6 +177,7 @@ textarea {
   font-weight: 500;
   backdrop-filter: none;
   border: 1px solid transparent;
+  white-space: nowrap;
 }
 .badge-default { background: #E1DDD0; color: var(--color-text-muted); border-color: #B5AE96; }
 .badge-success { background: #D8E5DC; color: #15803D;                  border-color: #9FB9AB; }

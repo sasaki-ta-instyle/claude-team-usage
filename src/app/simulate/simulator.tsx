@@ -217,9 +217,9 @@ export function Simulator({
               onChange={(e) => setTreatApiDirectAsZero(e.target.checked)}
             />
             <span>
-              <strong>API 直渡し候補（月 &lt; $10）をシート集計から外す</strong>
+              <strong>API 従量候補（月 &lt; $10）をシート集計から外す</strong>
               <span className="muted" style={{ marginLeft: 8, fontSize: 11 }}>
-                Workspace API キー直渡しに切り出し、$0 で計算
+                Workspace API キーで従量運用に切り出し、$0 で計算
               </span>
             </span>
           </label>
