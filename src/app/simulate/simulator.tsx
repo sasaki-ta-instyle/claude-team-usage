@@ -231,7 +231,7 @@ export function Simulator({
                   <td className="num">{fmtCost(r.codeCostCents ?? 0)}</td>
                   <td className="num"><strong>{fmtCost(r.costCents)}</strong></td>
                   <td>
-                    <span className={`seat-badge seat-badge--${r.candidate}`}>
+                    <span className={`badge ${r.candidate === "premium" ? "badge-success" : "badge-info"}`}>
                       {r.candidate}
                     </span>
                   </td>

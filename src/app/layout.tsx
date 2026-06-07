@@ -65,7 +65,7 @@ export default async function RootLayout({
               <AppNav />
               <div className="app-header__user">
                 {PREVIEW ? (
-                  <span className="env-badge" title="認証バイパス中（モックデータ）">
+                  <span className="badge badge-warning" title="認証バイパス中（モックデータ）">
                     PREVIEW
                   </span>
                 ) : null}

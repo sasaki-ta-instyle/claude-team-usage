@@ -166,43 +166,24 @@ textarea {
   font-weight: 600;
 }
 
-/* ── preview / status badges (env や sync 状態。seat-badge とは別系統) ─ */
-.env-badge {
+/* ── badges (design-system_liquid 準拠・不透明 hex + 1px border) ── */
+.badge {
   display: inline-flex;
   align-items: center;
   gap: 4px;
-  padding: 3px 10px;
+  padding: 4px 12px;
   border-radius: var(--r-pill);
-  font-size: 11px;
-  font-weight: 700;
-  letter-spacing: 0.08em;
-  background: rgba(212, 119, 44, 0.18);
-  border: 1px solid rgba(212, 119, 44, 0.45);
-  color: var(--color-warning);
-  text-transform: uppercase;
+  font-size: 0.75rem;
+  font-weight: 500;
+  backdrop-filter: none;
+  border: 1px solid transparent;
 }
-.status-badge {
-  display: inline-flex;
-  align-items: center;
-  gap: 4px;
-  padding: 3px 10px;
-  border-radius: var(--r-pill);
-  font-size: 11px;
-  font-weight: 600;
-  letter-spacing: 0.04em;
-  background: rgba(196, 193, 176, 0.32);
-  border: 1px solid rgba(255, 255, 255, 0.62);
-  color: var(--color-text);
-}
-.status-badge--ok {
-  background: rgba(123, 183, 133, 0.2);
-  border-color: rgba(123, 183, 133, 0.42);
-}
-.status-badge--error {
-  background: rgba(198, 41, 44, 0.1);
-  border-color: rgba(198, 41, 44, 0.3);
-  color: var(--color-text);
-}
+.badge-default { background: #E9E7E1; color: var(--color-text-muted); border-color: #DCDAD2; }
+.badge-success { background: #DEF2E6; color: #15803D;                  border-color: #C7E9D4; }
+.badge-warning { background: #FAECDC; color: #B45309;                  border-color: #F6DEC3; }
+.badge-error   { background: #F8E5E6; color: #B91C1C;                  border-color: #F2D0D1; }
+.badge-info    { background: #E5ECFD; color: #1D4ED8;                  border-color: #CFDDFB; }
+.badge-accent  { background: #DCDCDA; color: var(--color-text);        border-color: #CECDC4; }
 
 .callout {
   display: flex;
@@ -376,33 +357,6 @@ textarea {
 .usage-table th.num {
   text-align: right;
   font-variant-numeric: tabular-nums;
-}
-
-/* ── seat badges ──────────────────────────────────── */
-.seat-badge {
-  display: inline-flex;
-  align-items: center;
-  gap: 4px;
-  padding: 3px 10px;
-  border-radius: var(--r-pill);
-  font-size: 11px;
-  font-weight: 600;
-  letter-spacing: 0.04em;
-  background: rgba(196, 193, 176, 0.4);
-  border: 1px solid rgba(255, 255, 255, 0.6);
-  color: var(--color-text);
-}
-.seat-badge--premium {
-  background: rgba(123, 183, 133, 0.32);
-  border-color: rgba(123, 183, 133, 0.55);
-}
-.seat-badge--standard {
-  background: rgba(56, 83, 123, 0.18);
-  border-color: rgba(56, 83, 123, 0.4);
-}
-.seat-badge--null {
-  background: rgba(196, 193, 176, 0.28);
-  color: var(--color-text-muted);
 }
 
 /* ── buttons ──────────────────────────────────────── */

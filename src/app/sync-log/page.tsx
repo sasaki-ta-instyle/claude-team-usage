@@ -46,7 +46,7 @@ export default async function SyncLogPage() {
                     <td className="num">{r.rowsUpserted}</td>
                     <td>
                       <span
-                        className={`status-badge status-badge--${r.status === "ok" ? "ok" : "error"}`}
+                        className={`badge ${r.status === "ok" ? "badge-success" : "badge-error"}`}
                       >
                         {r.status}
                       </span>

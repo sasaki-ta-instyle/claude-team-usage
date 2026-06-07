@@ -84,7 +84,7 @@ export default async function MembersPage(props: {
                       <td className="num">{formatTokens(m.totalTokens)}</td>
                       <td>
                         <span
-                          className={`seat-badge seat-badge--${isPremium ? "premium" : "standard"}`}
+                          className={`badge ${isPremium ? "badge-success" : "badge-info"}`}
                         >
                           {isPremium ? "premium" : "standard"}
                         </span>
