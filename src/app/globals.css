@@ -350,6 +350,7 @@ textarea {
   letter-spacing: 0.1em;
   text-transform: uppercase;
   color: var(--color-text-muted);
+  white-space: nowrap;
 }
 .usage-table tbody tr:hover {
   background: rgba(255, 255, 255, 0.32);
