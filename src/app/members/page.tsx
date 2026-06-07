@@ -36,7 +36,8 @@ export default async function MembersPage(props: {
         Cowork + Code（OTel push）の合算コストで判定。
         <strong>月 ≥ $100 = Premium 推奨</strong> / <strong>$10 – $100 = Standard 維持</strong> /
         <strong>月 &lt; $10 = API 従量候補</strong> / プロンプト 0 = 未使用。
-        副バッジで <strong>制限到達</strong>（api_error 観測）/ <strong>高稼働</strong>（≥ {HIGH_ACTIVITY_DAYS} 日アクティブ）を表示。
+        <strong>制限到達回数</strong>列（api_error 観測数）で rate limit cap への当たり方を判断、
+        副バッジで <strong>高稼働</strong>（≥ {HIGH_ACTIVITY_DAYS} 日アクティブ）を表示。
       </p>
 
       <div className="flex-row" style={{ marginBottom: 16 }}>
@@ -70,7 +71,7 @@ export default async function MembersPage(props: {
                   <th className="num">合計コスト</th>
                   <th className="num">稼働日</th>
                   <th className="num">最大日コスト</th>
-                  <th className="num">api_error</th>
+                  <th className="num">制限到達回数</th>
                   <th>推奨 seat</th>
                 </tr>
               </thead>
@@ -114,18 +115,11 @@ export default async function MembersPage(props: {
                             {meta.helper}
                           </div>
                         ) : null}
-                        {(isCapped || isHighActivity) ? (
+                        {isHighActivity ? (
                           <div style={{ marginTop: 4, display: "flex", gap: 4, flexWrap: "wrap" }}>
-                            {isCapped ? (
-                              <span className="badge badge-warning" title="api_error が観測 = 制限到達の可能性">
-                                制限到達
-                              </span>
-                            ) : null}
-                            {isHighActivity ? (
-                              <span className="badge badge-accent" title={`過去 ${range} 日のうち ${activeDays} 日アクティブ`}>
-                                高稼働
-                              </span>
-                            ) : null}
+                            <span className="badge badge-accent" title={`過去 ${range} 日のうち ${activeDays} 日アクティブ`}>
+                              高稼働
+                            </span>
                           </div>
                         ) : null}
                       </td>
