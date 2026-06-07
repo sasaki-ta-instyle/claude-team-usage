@@ -275,7 +275,7 @@ export async function combinedOverall(opts: { from?: Date; to?: Date }) {
 
 // ─── 日次稼働シグナル ─────────────────────────────────────────
 // rate limit reset（5 時間 rolling）は per-user カラムが取れないので、
-// 「日次のアクティビティ密度」と「api_error 回数」で cap 到達を間接的に検知する。
+// 「日次のアクティビティ密度」と「api_error 回数」で制限到達を間接的に検知する。
 
 export type MemberActivitySignals = {
   activeDays: number;

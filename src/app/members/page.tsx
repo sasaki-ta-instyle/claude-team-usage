@@ -36,7 +36,7 @@ export default async function MembersPage(props: {
         Cowork + Code（OTel push）の合算コストで判定。
         <strong>月 ≥ $100 = Premium 推奨</strong> / <strong>$10 – $100 = Standard 維持</strong> /
         <strong>月 &lt; $10 = API 従量候補</strong> / プロンプト 0 = 未使用。
-        副バッジで <strong>cap 到達</strong>（api_error 観測）/ <strong>高稼働</strong>（≥ {HIGH_ACTIVITY_DAYS} 日アクティブ）を表示。
+        副バッジで <strong>制限到達</strong>（api_error 観測）/ <strong>高稼働</strong>（≥ {HIGH_ACTIVITY_DAYS} 日アクティブ）を表示。
       </p>
 
       <div className="flex-row" style={{ marginBottom: 16 }}>
@@ -117,8 +117,8 @@ export default async function MembersPage(props: {
                         {(isCapped || isHighActivity) ? (
                           <div style={{ marginTop: 4, display: "flex", gap: 4, flexWrap: "wrap" }}>
                             {isCapped ? (
-                              <span className="badge badge-warning" title="api_error が観測 = cap 到達の可能性">
-                                cap 到達
+                              <span className="badge badge-warning" title="api_error が観測 = 制限到達の可能性">
+                                制限到達
                               </span>
                             ) : null}
                             {isHighActivity ? (
