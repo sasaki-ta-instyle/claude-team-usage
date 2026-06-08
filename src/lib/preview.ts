@@ -78,9 +78,9 @@ export function mockUser(email: string) {
 
 export function mockMessagesSummary() {
   return [
-    { accountId: "instyle-prod", workspaceId: "default", apiKeyId: "ig-builder-runner", model: "claude-opus-4-7", tokensInput: 4_200_000, tokensOutput: 1_180_000, tokensCacheRead: 12_400_000, tokensCacheCreation: 980_000 },
-    { accountId: "instyle-prod", workspaceId: "default", apiKeyId: "ig-schedule-ai", model: "claude-sonnet-4-6", tokensInput: 2_840_000, tokensOutput: 720_000, tokensCacheRead: 6_120_000, tokensCacheCreation: 410_000 },
-    { accountId: "instyle-prod", workspaceId: "cpc-tools", apiKeyId: "internal-tools", model: "claude-haiku-4-5", tokensInput: 1_240_000, tokensOutput: 380_000, tokensCacheRead: 2_010_000, tokensCacheCreation: 180_000 },
+    { accountId: "instyle-prod", workspaceId: "default", apiKeyId: "ig-builder-runner", model: "claude-opus-4-7", serviceTier: null as string | null, tokensInput: 4_200_000, tokensOutput: 1_180_000, tokensCacheRead: 12_400_000, tokensCacheCreation: 980_000 },
+    { accountId: "instyle-prod", workspaceId: "default", apiKeyId: "ig-schedule-ai", model: "claude-sonnet-4-6", serviceTier: null as string | null, tokensInput: 2_840_000, tokensOutput: 720_000, tokensCacheRead: 6_120_000, tokensCacheCreation: 410_000 },
+    { accountId: "instyle-prod", workspaceId: "cpc-tools", apiKeyId: "internal-tools", model: "claude-haiku-4-5", serviceTier: null as string | null, tokensInput: 1_240_000, tokensOutput: 380_000, tokensCacheRead: 2_010_000, tokensCacheCreation: 180_000 },
   ];
 }
 

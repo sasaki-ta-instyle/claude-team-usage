@@ -2,6 +2,7 @@ import { and, desc, gte, lte, sql } from "drizzle-orm";
 
 import { db, schema } from "@/db/client";
 import { isoDateMinusDays, monthStartIso } from "@/lib/format";
+import { estimateCostCents } from "@/lib/pricing";
 import {
   PREVIEW,
   mockApiCostByModel,
@@ -169,6 +170,7 @@ export async function messagesUsageSummary(opts: {
       workspaceId: schema.messagesUsageDaily.workspaceId,
       apiKeyId: schema.messagesUsageDaily.apiKeyId,
       model: schema.messagesUsageDaily.model,
+      serviceTier: schema.messagesUsageDaily.serviceTier,
       tokensInput: sql<number>`coalesce(sum(${schema.messagesUsageDaily.tokensInput}), 0)`,
       tokensOutput: sql<number>`coalesce(sum(${schema.messagesUsageDaily.tokensOutput}), 0)`,
       tokensCacheRead: sql<number>`coalesce(sum(${schema.messagesUsageDaily.tokensCacheRead}), 0)`,
@@ -185,16 +187,116 @@ export async function messagesUsageSummary(opts: {
       schema.messagesUsageDaily.accountId,
       schema.messagesUsageDaily.workspaceId,
       schema.messagesUsageDaily.apiKeyId,
-      schema.messagesUsageDaily.model
+      schema.messagesUsageDaily.model,
+      schema.messagesUsageDaily.serviceTier
     );
 
   return rows.map((r) => ({
     ...r,
+    serviceTier: r.serviceTier ?? null,
     tokensInput: Number(r.tokensInput ?? 0),
     tokensOutput: Number(r.tokensOutput ?? 0),
     tokensCacheRead: Number(r.tokensCacheRead ?? 0),
     tokensCacheCreation: Number(r.tokensCacheCreation ?? 0),
   }));
+}
+
+// API キー別 × workspace 別の **推計** USD（cents）。Anthropic の Cost Report API は
+// API キー粒度の group_by をサポートしないため、messages_usage_daily のトークン量に
+// モデル単価を掛けた推計値で代用する。正確な実額は console.anthropic.com を見る。
+export type ApiKeyEstimatedCostRow = {
+  apiKeyId: string;
+  workspaceId: string;
+  costCentsEstimated: number;
+  tokensInput: number;
+  tokensOutput: number;
+  tokensCacheRead: number;
+  tokensCacheCreation: number;
+  hasUnknownModel: boolean;
+  modelTop: string;
+};
+
+export async function apiCostEstimatedByApiKey(opts: {
+  fromDate?: string;
+  toDate?: string;
+}): Promise<ApiKeyEstimatedCostRow[]> {
+  const rows = await messagesUsageSummary(opts);
+
+  // (apiKeyId|workspaceId) で集計、モデル別の cents も保持して top を決める。
+  const bucket = new Map<
+    string,
+    {
+      apiKeyId: string;
+      workspaceId: string;
+      costCentsEstimated: number;
+      tokensInput: number;
+      tokensOutput: number;
+      tokensCacheRead: number;
+      tokensCacheCreation: number;
+      hasUnknownModel: boolean;
+      modelCents: Map<string, number>;
+    }
+  >();
+
+  for (const r of rows) {
+    const { cents, isUnknownModel } = estimateCostCents({
+      model: r.model || "",
+      serviceTier: r.serviceTier,
+      tokensInput: r.tokensInput,
+      tokensOutput: r.tokensOutput,
+      tokensCacheRead: r.tokensCacheRead,
+      tokensCacheCreation: r.tokensCacheCreation,
+    });
+    const key = `${r.apiKeyId || ""}|${r.workspaceId || ""}`;
+    let b = bucket.get(key);
+    if (!b) {
+      b = {
+        apiKeyId: r.apiKeyId || "",
+        workspaceId: r.workspaceId || "",
+        costCentsEstimated: 0,
+        tokensInput: 0,
+        tokensOutput: 0,
+        tokensCacheRead: 0,
+        tokensCacheCreation: 0,
+        hasUnknownModel: false,
+        modelCents: new Map(),
+      };
+      bucket.set(key, b);
+    }
+    b.costCentsEstimated += cents;
+    b.tokensInput += r.tokensInput;
+    b.tokensOutput += r.tokensOutput;
+    b.tokensCacheRead += r.tokensCacheRead;
+    b.tokensCacheCreation += r.tokensCacheCreation;
+    if (isUnknownModel) b.hasUnknownModel = true;
+    if (r.model) {
+      b.modelCents.set(r.model, (b.modelCents.get(r.model) ?? 0) + cents);
+    }
+  }
+
+  return Array.from(bucket.values())
+    .map((b) => {
+      let modelTop = "—";
+      let topCents = -1;
+      for (const [m, c] of b.modelCents) {
+        if (c > topCents) {
+          modelTop = m;
+          topCents = c;
+        }
+      }
+      return {
+        apiKeyId: b.apiKeyId,
+        workspaceId: b.workspaceId,
+        costCentsEstimated: b.costCentsEstimated,
+        tokensInput: b.tokensInput,
+        tokensOutput: b.tokensOutput,
+        tokensCacheRead: b.tokensCacheRead,
+        tokensCacheCreation: b.tokensCacheCreation,
+        hasUnknownModel: b.hasUnknownModel,
+        modelTop,
+      };
+    })
+    .sort((a, b) => b.costCentsEstimated - a.costCentsEstimated);
 }
 
 // ─── コンソール API 課金（Cost Report） ───
