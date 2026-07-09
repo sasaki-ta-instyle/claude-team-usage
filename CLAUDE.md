@@ -259,7 +259,23 @@ node scripts/monthly-report.mjs --force-current-month
 `ssh conoha-deploy 'crontab -l'` で確認、`crontab -e` で追記。既存の 6h sync 行の隣に:
 
 ```
-0 3 1 * * cd /var/www/app/claude-team-usage/current && set -a && . /var/www/_shared/apps/app-claude-team-usage.env && set +a && REPORT_HTML_DEST=/var/www/app/html node scripts/monthly-report.mjs >> /var/log/app-claude-team-usage-monthly.log 2>&1
+0 3 1 * * cd /var/www/app/claude-team-usage/current && set -a && . /var/www/_shared/apps/app-claude-team-usage.env && set +a && REPORT_HTML_DEST=/var/www/app/html node scripts/monthly-report.mjs >> /var/www/app/claude-team-usage/shared/monthly.log 2>&1
+```
+
+**追加方法（冪等）** — `crontab -e` はエディタが必要で ssh の非 TTY だと失敗するため、`crontab -` にパイプする:
+
+```bash
+ssh conoha-deploy bash -s <<'EOF'
+tmp=$(mktemp)
+crontab -l 2>/dev/null | grep -v monthly-report.mjs > "$tmp" || true
+cat >> "$tmp" <<'CRON'
+0 3 1 * * cd /var/www/app/claude-team-usage/current && set -a && . /var/www/_shared/apps/app-claude-team-usage.env && set +a && REPORT_HTML_DEST=/var/www/app/html node scripts/monthly-report.mjs >> /var/www/app/claude-team-usage/shared/monthly.log 2>&1
+CRON
+crontab "$tmp"
+rm "$tmp"
+echo "--- current crontab ---"
+crontab -l
+EOF
 ```
 
 ### 初回反映手順（手動）
