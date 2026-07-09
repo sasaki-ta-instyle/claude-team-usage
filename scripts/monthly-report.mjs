@@ -111,33 +111,49 @@ async function saveLocal(monthLabel, html, opts) {
   return localPath;
 }
 
+// dest が "host:/path" 形式なら scp モード、それ以外 (絶対/相対パス) なら
+// ローカルコピーモード。サーバ内で cron 実行するときは絶対パスにする。
+function parseDest(dest) {
+  const m = dest.match(/^([^\s:@\/][^\s:]*):(.+)$/);
+  if (m) return { mode: "scp", host: m[1], dir: m[2] };
+  return { mode: "local", host: null, dir: dest };
+}
+
 async function scpToProduction(monthLabel, localPath, opts) {
   if (opts.skipScp) {
     log("skip scp (--skip-scp)");
     return null;
   }
-  const dest =
-    process.env.REPORT_HTML_DEST ||
-    "conoha-root:/var/www/app/html";
+  const destRaw =
+    process.env.REPORT_HTML_DEST || "conoha-root:/var/www/app/html";
+  const dest = parseDest(destRaw);
   const remoteName = `claude-team-usage-${monthLabel}.html`;
-  const target = `${dest}/${remoteName}`;
+  const target =
+    dest.mode === "scp"
+      ? `${dest.host}:${dest.dir}/${remoteName}`
+      : path.join(dest.dir, remoteName);
   const publicUrl =
-    process.env.REPORT_PUBLIC_URL_BASE ||
-    "https://app.instyle.group/html";
-  log(`scp ${localPath} -> ${target}`);
+    process.env.REPORT_PUBLIC_URL_BASE || "https://app.instyle.group/html";
+  log(`${dest.mode === "scp" ? "scp" : "cp"} ${localPath} -> ${target}`);
   if (opts.dryRun) {
-    log("dry-run: skipping actual scp");
+    log(`dry-run: skipping actual ${dest.mode === "scp" ? "scp" : "cp"}`);
     return `${publicUrl}/${remoteName}`;
   }
-  const { spawn } = await import("node:child_process");
-  await new Promise((resolve, reject) => {
-    const proc = spawn("scp", [localPath, target], { stdio: "inherit" });
-    proc.on("exit", (code) => {
-      if (code === 0) resolve();
-      else reject(new Error(`scp exited with code ${code}`));
+  if (dest.mode === "local") {
+    const { copyFile, mkdir: mkdirFs } = await import("node:fs/promises");
+    await mkdirFs(dest.dir, { recursive: true });
+    await copyFile(localPath, target);
+  } else {
+    const { spawn } = await import("node:child_process");
+    await new Promise((resolve, reject) => {
+      const proc = spawn("scp", [localPath, target], { stdio: "inherit" });
+      proc.on("exit", (code) => {
+        if (code === 0) resolve();
+        else reject(new Error(`scp exited with code ${code}`));
+      });
+      proc.on("error", reject);
     });
-    proc.on("error", reject);
-  });
+  }
   return `${publicUrl}/${remoteName}`;
 }
 
@@ -162,31 +178,41 @@ async function runRemote(args, opts) {
   });
 }
 
-// リモートの /var/www/app/html/claude-team-usage-YYYY-MM.html を列挙して
-// 索引 HTML を組み立て、claude-team-usage-reports.html として scp する。
+// /var/www/app/html/claude-team-usage-YYYY-MM.html を列挙して
+// 索引 HTML を組み立て、claude-team-usage-reports.html として書き込む。
+// dest が local モードなら fs.readdir、scp モードなら ssh ls を使う。
 async function rebuildIndex(opts) {
   if (opts.dryRun || opts.skipScp) {
     log(`skip index rebuild (dryRun=${opts.dryRun} skipScp=${opts.skipScp})`);
     return null;
   }
-  const dest =
+  const destRaw =
     process.env.REPORT_HTML_DEST || "conoha-root:/var/www/app/html";
-  const [remoteHost, remoteDir] = dest.split(":");
-  if (!remoteHost || !remoteDir) {
-    log(`WARN: cannot parse REPORT_HTML_DEST=${dest}; skipping index`);
-    return null;
-  }
+  const dest = parseDest(destRaw);
   const publicUrl =
     process.env.REPORT_PUBLIC_URL_BASE || "https://app.instyle.group/html";
 
-  log(`listing ${remoteHost}:${remoteDir}/claude-team-usage-*.html`);
-  const raw = await runRemote(
-    [
-      remoteHost,
-      `ls -1 ${remoteDir}/claude-team-usage-????-??.html 2>/dev/null || true`,
-    ],
-    opts
-  );
+  let raw = "";
+  if (dest.mode === "scp") {
+    log(`listing ${dest.host}:${dest.dir}/claude-team-usage-*.html`);
+    raw = await runRemote(
+      [
+        dest.host,
+        `ls -1 ${dest.dir}/claude-team-usage-????-??.html 2>/dev/null || true`,
+      ],
+      opts
+    );
+  } else {
+    log(`listing ${dest.dir}/claude-team-usage-*.html`);
+    const { readdir } = await import("node:fs/promises");
+    try {
+      const names = await readdir(dest.dir);
+      raw = names.join("\n");
+    } catch (err) {
+      log(`WARN: readdir failed: ${err.message}`);
+      raw = "";
+    }
+  }
   const months = raw
     .split("\n")
     .map((l) => l.trim())
@@ -244,17 +270,23 @@ async function rebuildIndex(opts) {
   await writeFile(localPath, html, "utf8");
   log(`saved index locally: ${localPath}`);
 
-  const { spawn } = await import("node:child_process");
-  const target = `${dest}/claude-team-usage-reports.html`;
-  await new Promise((resolve, reject) => {
-    const proc = spawn("scp", [localPath, target], { stdio: "inherit" });
-    proc.on("exit", (code) => {
-      if (code === 0) resolve();
-      else reject(new Error(`scp index exited with code ${code}`));
+  const indexName = "claude-team-usage-reports.html";
+  if (dest.mode === "local") {
+    const { copyFile } = await import("node:fs/promises");
+    await copyFile(localPath, path.join(dest.dir, indexName));
+  } else {
+    const { spawn } = await import("node:child_process");
+    const target = `${dest.host}:${dest.dir}/${indexName}`;
+    await new Promise((resolve, reject) => {
+      const proc = spawn("scp", [localPath, target], { stdio: "inherit" });
+      proc.on("exit", (code) => {
+        if (code === 0) resolve();
+        else reject(new Error(`scp index exited with code ${code}`));
+      });
+      proc.on("error", reject);
     });
-    proc.on("error", reject);
-  });
-  const indexUrl = `${publicUrl}/claude-team-usage-reports.html`;
+  }
+  const indexUrl = `${publicUrl}/${indexName}`;
   log(`index uploaded: ${indexUrl}`);
   return indexUrl;
 }
