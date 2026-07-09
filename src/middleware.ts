@@ -15,6 +15,7 @@ const PUBLIC = [
   /^\/login$/,
   /^\/api\/auth(\/|$)/,
   /^\/api\/sync(\/|$)/,
+  /^\/api\/report(\/|$)/, // 月次レポート HTML（Bearer 認証で内部保護）
   /^\/api\/health$/,
   /^\/api\/otel(\/|$)/, // Cowork からの OTLP push 受信用
 ];

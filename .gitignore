@@ -37,6 +37,9 @@ yarn-error.log*
 # Claude Code の会話ログ書き出し hook が CWD に作るログ（万一の保険）
 _conversation-logs/
 
+# 月次レポートのローカル保存先（scp 前の一時保管）
+tmp/
+
 # turbo
 .turbo
 
