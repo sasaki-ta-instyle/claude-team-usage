@@ -242,6 +242,9 @@ ssh conoha-deploy 'cd /var/www/app/claude-team-usage/current \
 
 # 特定月を対象、削除だけ止めたい場合
 node scripts/monthly-report.mjs --month=2026-06 --skip-delete
+
+# バッファ無視 (前月分も削除) — Neon 逼迫時の緊急対応
+node scripts/monthly-report.mjs --force-current-month
 ```
 
 ### 削除ルール

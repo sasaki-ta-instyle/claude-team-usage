@@ -26,16 +26,21 @@ function parseArgs(argv) {
     skipScp: false,
     skipDelete: false,
     skipNotify: false,
+    forceCurrentMonth: false,
   };
   for (const a of argv.slice(2)) {
     if (a === "--dry-run") opts.dryRun = true;
     else if (a === "--skip-scp") opts.skipScp = true;
     else if (a === "--skip-delete") opts.skipDelete = true;
     else if (a === "--skip-notify") opts.skipNotify = true;
+    else if (a === "--force-current-month") opts.forceCurrentMonth = true;
     else if (a.startsWith("--month=")) opts.month = a.slice("--month=".length);
     else if (a === "--help" || a === "-h") {
       console.log(
-        "Usage: node scripts/monthly-report.mjs [--month=YYYY-MM] [--dry-run] [--skip-scp] [--skip-delete] [--skip-notify]"
+        "Usage: node scripts/monthly-report.mjs [--month=YYYY-MM] [--dry-run] [--skip-scp] [--skip-delete] [--skip-notify] [--force-current-month]"
+      );
+      console.log(
+        "  --force-current-month: 削除境界を JST 今月月初にする (= 前月分も削除、バッファ無視)"
       );
       process.exit(0);
     } else {
@@ -321,15 +326,20 @@ function makePool() {
 }
 
 async function runDelete(pool, opts) {
-  // 「前月分は残す」= 境界 = JST 今月月初 - 1 ヶ月。
-  // occurred_at < 境界 の行を削除。
+  // 通常: 境界 = JST 今月月初 - 1 ヶ月 (前月分は残す)。
+  // --force-current-month: 境界 = JST 今月月初 (前月分も削除)。
   const now = new Date();
   const jst = new Date(now.getTime() + JST_OFFSET_MS);
   const y = jst.getUTCFullYear();
   const m = jst.getUTCMonth() + 1; // 今月 (1..12)
-  const boundary = jstMonthStart(y, m - 1); // 前月月初 JST の UTC
+  const boundary = opts.forceCurrentMonth
+    ? jstMonthStart(y, m) // 今月月初 JST の UTC
+    : jstMonthStart(y, m - 1); // 前月月初 JST の UTC
   const boundaryIso = boundary.toISOString();
-  log(`delete boundary: occurred_at < ${boundaryIso} (JST 前月月初)`);
+  const boundaryLabel = opts.forceCurrentMonth
+    ? "JST 今月月初 (バッファ無視)"
+    : "JST 前月月初";
+  log(`delete boundary: occurred_at < ${boundaryIso} (${boundaryLabel})`);
 
   if (opts.skipDelete) {
     log("skip delete (--skip-delete): no DB queries executed");
