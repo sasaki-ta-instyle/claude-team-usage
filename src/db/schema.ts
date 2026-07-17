@@ -185,6 +185,7 @@ export const coworkEvents = pgTable("cowork_events", {
   sessionId: text("session_id"),
   organizationId: text("organization_id"),
   promptId: text("prompt_id"),
+  serviceName: text("service_name"),
   model: text("model"),
   inputTokens: integer("input_tokens"),
   outputTokens: integer("output_tokens"),

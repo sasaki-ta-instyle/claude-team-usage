@@ -113,6 +113,8 @@ export async function handleOtelLogs(req: Request) {
           ? promptLenRaw
           : null;
 
+    const serviceName = pickStr(res, "service.name");
+
     return {
       occurredAt: r.occurredAt,
       eventName: eventNameOf(a, r.body),
@@ -123,6 +125,7 @@ export async function handleOtelLogs(req: Request) {
         lookupStr
       ),
       promptId: pickFirst(["prompt.id", "prompt_id"], lookupStr),
+      serviceName,
       model: pickFirst(["model", "gen_ai.request.model"], lookupStr),
       inputTokens: pickFirst(["input_tokens", "gen_ai.usage.input_tokens"], lookupNum),
       outputTokens: pickFirst(["output_tokens", "gen_ai.usage.output_tokens"], lookupNum),
@@ -133,7 +136,9 @@ export async function handleOtelLogs(req: Request) {
       errorText: pickFirst(["error", "error.message"], lookupStr),
       statusCode: pickFirst(["status_code"], lookupNum),
       promptLength,
-      raw: { attrs: a, resource: res, body: r.body },
+      // raw jsonb は保存しない（Neon Free 512MB の逼迫対策）。
+      // 参照が必要な値は上のカラムに正規化済み。
+      raw: null,
     };
   });
 
