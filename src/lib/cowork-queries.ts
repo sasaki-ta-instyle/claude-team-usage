@@ -29,13 +29,14 @@ function rangeBounds(from?: Date, to?: Date) {
 }
 
 // resource.service.name で event を振り分ける。
-// cowork → Cowork から push、claude-code / claude_code → Claude Code CLI から push。
+// cowork → Cowork から push、
+// claude-code / claude_code / claude-code-desktop → Claude Code CLI / Desktop から push。
 // 正規化済みの service_name カラムを使う（旧: raw JSONB から抽出）。
 function serviceFilter(serviceName: "cowork" | "claude-code") {
   if (serviceName === "cowork") {
     return sql`coalesce(${schema.coworkEvents.serviceName}, '') = 'cowork'`;
   }
-  return sql`coalesce(${schema.coworkEvents.serviceName}, '') in ('claude-code', 'claude_code')`;
+  return sql`coalesce(${schema.coworkEvents.serviceName}, '') in ('claude-code', 'claude_code', 'claude-code-desktop')`;
 }
 
 export async function coworkMemberSummary(opts: {
@@ -149,8 +150,8 @@ export type CombinedMemberRow = {
 };
 
 const SVC_COWORK = sql`coalesce(${schema.coworkEvents.serviceName}, '') = 'cowork'`;
-const SVC_CODE = sql`coalesce(${schema.coworkEvents.serviceName}, '') in ('claude-code', 'claude_code')`;
-const SVC_ANY = sql`coalesce(${schema.coworkEvents.serviceName}, '') in ('cowork', 'claude-code', 'claude_code')`;
+const SVC_CODE = sql`coalesce(${schema.coworkEvents.serviceName}, '') in ('claude-code', 'claude_code', 'claude-code-desktop')`;
+const SVC_ANY = sql`coalesce(${schema.coworkEvents.serviceName}, '') in ('cowork', 'claude-code', 'claude_code', 'claude-code-desktop')`;
 
 export async function combinedMemberSummary(opts: {
   from?: Date;
