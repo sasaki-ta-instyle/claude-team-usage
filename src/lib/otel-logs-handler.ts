@@ -136,9 +136,6 @@ export async function handleOtelLogs(req: Request) {
       errorText: pickFirst(["error", "error.message"], lookupStr),
       statusCode: pickFirst(["status_code"], lookupNum),
       promptLength,
-      // raw jsonb は保存しない（Neon Free 512MB の逼迫対策）。
-      // 参照が必要な値は上のカラムに正規化済み。
-      raw: null,
     };
   });
 

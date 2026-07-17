@@ -196,7 +196,6 @@ export const coworkEvents = pgTable("cowork_events", {
   errorText: text("error_text"),
   statusCode: integer("status_code"),
   promptLength: integer("prompt_length"),
-  raw: jsonb("raw"),
 });
 
 export const syncLog = pgTable("sync_log", {

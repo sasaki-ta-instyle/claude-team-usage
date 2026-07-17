@@ -1,0 +1,1 @@
+ALTER TABLE "cowork_events" DROP COLUMN "raw";
