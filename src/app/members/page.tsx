@@ -1,6 +1,10 @@
 import Link from "next/link";
 
-import { combinedMemberSummary, memberActivitySignals } from "@/lib/cowork-queries";
+import {
+  combinedMemberSummary,
+  getSeatAssignments,
+  memberActivitySignals,
+} from "@/lib/cowork-queries";
 import { recommendSeat, SEAT_RECO_META } from "@/lib/seat-recommendation";
 import { formatCost, formatTokens, isoDateMinusDays } from "@/lib/format";
 
@@ -23,9 +27,10 @@ export default async function MembersPage(props: {
   const toDate = isoDateMinusDays(0);
   const from = new Date(`${fromDate}T00:00:00Z`);
   const to = new Date();
-  const [members, signals] = await Promise.all([
+  const [members, signals, seats] = await Promise.all([
     combinedMemberSummary({ from, to }),
     memberActivitySignals({ from, to }),
+    getSeatAssignments(),
   ]);
 
   return (
@@ -38,6 +43,8 @@ export default async function MembersPage(props: {
         <strong>月 &lt; $10 = API 従量候補</strong> / プロンプト 0 = 未使用。
         <strong>制限到達回数</strong>列（api_error 観測数）で rate limit cap への当たり方を判断、
         副バッジで <strong>高稼働</strong>（≥ {HIGH_ACTIVITY_DAYS} 日アクティブ）を表示。
+        <strong>現状 tier</strong> と推奨がズレている場合は「⬇ 過剰投資」（Premium 割当だが推奨は下位）／
+        「⬆ 過小投資」（Standard 割当だが推奨 Premium）バッジで警告する。
       </p>
 
       <div className="flex-row" style={{ marginBottom: 16 }}>
@@ -72,6 +79,7 @@ export default async function MembersPage(props: {
                   <th className="num">稼働日</th>
                   <th className="num">最大日コスト</th>
                   <th className="num">制限到達回数</th>
+                  <th>現状 tier</th>
                   <th>推奨 seat</th>
                 </tr>
               </thead>
@@ -86,6 +94,11 @@ export default async function MembersPage(props: {
                   const apiErrorCount = sig?.apiErrorCount ?? 0;
                   const isCapped = apiErrorCount > 0;
                   const isHighActivity = activeDays >= HIGH_ACTIVITY_DAYS;
+                  const currentSeat = seats.get(m.email.toLowerCase()) ?? null;
+                  const overInvest =
+                    currentSeat === "premium" && reco !== "premium";
+                  const underInvest =
+                    currentSeat === "standard" && reco === "premium";
                   return (
                     <tr key={m.email} className={isApiDirect ? "row-warn" : undefined}>
                       <td>
@@ -107,6 +120,29 @@ export default async function MembersPage(props: {
                         style={isCapped ? { color: "var(--color-warning)", fontWeight: 600 } : undefined}
                       >
                         {apiErrorCount}
+                      </td>
+                      <td>
+                        {currentSeat === "premium" ? (
+                          <span className="badge badge-success">Premium</span>
+                        ) : currentSeat === "standard" ? (
+                          <span className="badge badge-info">Standard</span>
+                        ) : (
+                          <span className="badge badge-default">未割り当て</span>
+                        )}
+                        {overInvest ? (
+                          <div style={{ marginTop: 4 }}>
+                            <span className="badge badge-warning" title="Premium 割当だが推奨は下位。Standard / API 従量への切り替え検討">
+                              ⬇ 過剰投資
+                            </span>
+                          </div>
+                        ) : null}
+                        {underInvest ? (
+                          <div style={{ marginTop: 4 }}>
+                            <span className="badge badge-accent" title="Standard 割当だが推奨は Premium。昇格検討">
+                              ⬆ 過小投資
+                            </span>
+                          </div>
+                        ) : null}
                       </td>
                       <td>
                         <span className={`badge ${meta.badge}`}>{meta.label}</span>

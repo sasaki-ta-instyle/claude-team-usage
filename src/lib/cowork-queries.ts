@@ -345,6 +345,27 @@ export async function memberActivitySignals(opts: {
   return out;
 }
 
+// users テーブルの seat_type を email → seat_type の Map で返す。
+// メアドとティアだけで管理する運用のため、他カラムは触らない。
+// email は小文字化して返す（cowork_events / code_usage_daily 側と揃える）。
+export async function getSeatAssignments(): Promise<Map<string, "premium" | "standard" | null>> {
+  const out = new Map<string, "premium" | "standard" | null>();
+  if (PREVIEW) return out;
+  const rows = await db
+    .select({
+      email: schema.users.email,
+      seatType: schema.users.seatType,
+    })
+    .from(schema.users);
+  for (const r of rows) {
+    if (!r.email) continue;
+    const seat =
+      r.seatType === "premium" || r.seatType === "standard" ? r.seatType : null;
+    out.set(r.email.toLowerCase(), seat);
+  }
+  return out;
+}
+
 export async function coworkRecentEvents(opts: {
   limit?: number;
   service?: "cowork" | "claude-code";
