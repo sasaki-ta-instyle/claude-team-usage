@@ -228,6 +228,20 @@ textarea {
   color: var(--color-text-muted);
   font-size: 13px;
   margin: 0 0 28px;
+  word-break: keep-all;
+  overflow-wrap: anywhere;
+  line-height: 1.7;
+}
+/* BudouX で <wbr> を差し込んだ意味区切りでのみ改行させる。
+   バッジ・ボタン・コードは word-break: normal に戻して意図しない縦割れを避ける */
+h1, h2, h3, h4, p, li, .callout, .lede, blockquote {
+  word-break: keep-all;
+  overflow-wrap: anywhere;
+}
+.badge, .btn, code, pre {
+  word-break: normal;
+  overflow-wrap: normal;
+  white-space: nowrap;
 }
 
 /* ── glass surfaces ───────────────────────────────── */

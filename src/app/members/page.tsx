@@ -130,17 +130,29 @@ export default async function MembersPage(props: {
                           <span className="badge badge-default">未割り当て</span>
                         )}
                         {overInvest ? (
-                          <div style={{ marginTop: 4 }}>
-                            <span className="badge badge-warning" title="Premium 割当だが推奨は下位。Standard / API 従量への切り替え検討">
-                              ⬇ 過剰投資
-                            </span>
+                          <div
+                            style={{
+                              marginTop: 4,
+                              fontSize: 11,
+                              fontWeight: 600,
+                              color: "var(--color-warning)",
+                            }}
+                            title="Premium 割当だが推奨は下位。Standard / API 従量への切り替え検討"
+                          >
+                            ⬇ 過剰投資
                           </div>
                         ) : null}
                         {underInvest ? (
-                          <div style={{ marginTop: 4 }}>
-                            <span className="badge badge-accent" title="Standard 割当だが推奨は Premium。昇格検討">
-                              ⬆ 過小投資
-                            </span>
+                          <div
+                            style={{
+                              marginTop: 4,
+                              fontSize: 11,
+                              fontWeight: 600,
+                              color: "var(--color-info)",
+                            }}
+                            title="Standard 割当だが推奨は Premium。昇格検討"
+                          >
+                            ⬆ 過小投資
                           </div>
                         ) : null}
                       </td>

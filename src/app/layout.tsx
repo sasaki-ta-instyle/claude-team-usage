@@ -3,6 +3,7 @@ import type { Metadata } from "next";
 import { auth, signOut } from "@/lib/auth";
 import { PREVIEW } from "@/lib/preview";
 import { AppNav } from "./_nav";
+import { BudouxWrap } from "./_budoux";
 import "./globals.css";
 
 const SITE_URL = "https://app.instyle.group/claude-team-usage";
@@ -49,6 +50,7 @@ export default async function RootLayout({
   return (
     <html lang="ja">
       <body>
+        <BudouxWrap />
         <div className="scene-bg" aria-hidden />
         {isLoggedIn ? (
           <div className="app-shell">
