@@ -357,6 +357,13 @@ h1, h2, h3, h4, p, li, .callout, .lede, blockquote {
   padding: 12px 14px;
   text-align: left;
   border-bottom: 1px solid rgba(53, 54, 45, 0.06);
+  /* 折り返しによる縦割れを既定で禁止。テーブル全体は .table-scroll で
+     横スクロール、明示的に折り返したいセルは .can-wrap を付ける */
+  white-space: nowrap;
+}
+.usage-table td.can-wrap,
+.usage-table th.can-wrap {
+  white-space: normal;
 }
 .usage-table th {
   font-size: 11px;
@@ -379,6 +386,9 @@ h1, h2, h3, h4, p, li, .callout, .lede, blockquote {
 .usage-table th.num {
   text-align: right;
   font-variant-numeric: tabular-nums;
+  /* コスト `$X / ¥Y` やトークン `12.3k` などが / 前後や桁で折れて
+     縦割れするのを防ぐ。テーブル全体は .table-scroll 側で横スクロール */
+  white-space: nowrap;
 }
 /* 列数が多い /members 用の絞り幅。プロンプト数と制限到達回数など桁の小さい列に付ける */
 .usage-table td.num--narrow,
