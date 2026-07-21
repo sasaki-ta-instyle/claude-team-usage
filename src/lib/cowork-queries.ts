@@ -28,6 +28,14 @@ function rangeBounds(from?: Date, to?: Date) {
   return { fromD, toD };
 }
 
+// ダッシュボード上で非表示にしたい email。DB 側は保持したまま集計・表示から除外する。
+// 恒久対応（個人 gmail 側で Claude Code を打っている本人が org アカウントに切り替えるまでの措置）。
+const HIDDEN_EMAILS_LOWER = ["375tanabe.o8@gmail.com"];
+const hiddenEmailFilter = sql`coalesce(lower(${schema.coworkEvents.userEmail}), '') not in (${sql.join(
+  HIDDEN_EMAILS_LOWER.map((e) => sql`${e}`),
+  sql`, `
+)})`;
+
 // resource.service.name で event を振り分ける。
 // cowork → Cowork から push、
 // claude-code / claude_code / claude-code-desktop → Claude Code CLI / Desktop から push。
@@ -68,6 +76,7 @@ export async function coworkMemberSummary(opts: {
         gte(schema.coworkEvents.occurredAt, fromD),
         lte(schema.coworkEvents.occurredAt, toD),
         sql`${schema.coworkEvents.userEmail} is not null`,
+        hiddenEmailFilter,
         serviceFilter(service)
       )
     )
@@ -114,6 +123,7 @@ export async function coworkOverall(opts: {
       and(
         gte(schema.coworkEvents.occurredAt, fromD),
         lte(schema.coworkEvents.occurredAt, toD),
+        hiddenEmailFilter,
         serviceFilter(service)
       )
     );
@@ -197,6 +207,7 @@ export async function combinedMemberSummary(opts: {
         gte(schema.coworkEvents.occurredAt, fromD),
         lte(schema.coworkEvents.occurredAt, toD),
         sql`${schema.coworkEvents.userEmail} is not null`,
+        hiddenEmailFilter,
         SVC_ANY
       )
     )
@@ -252,6 +263,7 @@ export async function combinedOverall(opts: { from?: Date; to?: Date }) {
       and(
         gte(schema.coworkEvents.occurredAt, fromD),
         lte(schema.coworkEvents.occurredAt, toD),
+        hiddenEmailFilter,
         SVC_ANY
       )
     );
@@ -319,6 +331,7 @@ export async function memberActivitySignals(opts: {
           gte(schema.coworkEvents.occurredAt, fromD),
           lte(schema.coworkEvents.occurredAt, toD),
           sql`${schema.coworkEvents.userEmail} is not null`,
+          hiddenEmailFilter,
           SVC_ANY
         )
       )
@@ -386,7 +399,7 @@ export async function coworkRecentEvents(opts: {
       errorText: schema.coworkEvents.errorText,
     })
     .from(schema.coworkEvents)
-    .where(serviceFilter(service))
+    .where(and(serviceFilter(service), hiddenEmailFilter))
     .orderBy(desc(schema.coworkEvents.occurredAt))
     .limit(limit);
 }
