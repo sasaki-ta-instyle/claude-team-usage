@@ -369,8 +369,14 @@ textarea {
 /* 列数が多い /members 用の絞り幅。プロンプト数と制限到達回数など桁の小さい列に付ける */
 .usage-table td.num--narrow,
 .usage-table th.num--narrow {
-  padding-left: 6px;
-  padding-right: 6px;
+  padding-left: 4px;
+  padding-right: 4px;
+}
+/* num--narrow のヘッダーは 2 行に折り返して更に幅を稼ぐ */
+.usage-table th.num--narrow {
+  white-space: normal;
+  line-height: 1.15;
+  max-width: 68px;
 }
 
 /* ── buttons ──────────────────────────────────────── */
