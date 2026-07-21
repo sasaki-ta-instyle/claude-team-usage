@@ -108,7 +108,7 @@ export default async function MembersPage(props: {
                       </td>
                       <td className="num num--narrow">{m.coworkPrompts.toLocaleString()}</td>
                       <td className="num num--narrow">{m.codePrompts.toLocaleString()}</td>
-                      <td className="num">{formatCost(m.coworkCostCents)}</td>
+                      <td className="num">{formatJpyFromCents(m.coworkCostCents)}</td>
                       <td className="num">{formatCost(m.codeCostCents)}</td>
                       <td className="num">
                         <strong>{formatJpyFromCents(m.totalCostCents)}</strong>
