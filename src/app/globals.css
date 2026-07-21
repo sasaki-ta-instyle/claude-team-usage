@@ -366,6 +366,12 @@ textarea {
   text-align: right;
   font-variant-numeric: tabular-nums;
 }
+/* 列数が多い /members 用の絞り幅。プロンプト数と制限到達回数など桁の小さい列に付ける */
+.usage-table td.num--narrow,
+.usage-table th.num--narrow {
+  padding-left: 6px;
+  padding-right: 6px;
+}
 
 /* ── buttons ──────────────────────────────────────── */
 .btn {

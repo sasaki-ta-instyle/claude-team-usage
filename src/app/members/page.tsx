@@ -71,14 +71,14 @@ export default async function MembersPage(props: {
               <thead>
                 <tr>
                   <th>メンバー</th>
-                  <th className="num">Cowork プロンプト</th>
-                  <th className="num">Code プロンプト</th>
+                  <th className="num num--narrow">Cowork プロンプト</th>
+                  <th className="num num--narrow">Code プロンプト</th>
                   <th className="num">Cowork コスト</th>
                   <th className="num">Code コスト</th>
                   <th className="num">合計コスト</th>
                   <th className="num">稼働日</th>
                   <th className="num">最大日コスト</th>
-                  <th className="num">制限到達回数</th>
+                  <th className="num num--narrow">制限到達回数</th>
                   <th>現状 tier</th>
                   <th>推奨 seat</th>
                 </tr>
@@ -106,8 +106,8 @@ export default async function MembersPage(props: {
                           {m.email}
                         </Link>
                       </td>
-                      <td className="num">{m.coworkPrompts.toLocaleString()}</td>
-                      <td className="num">{m.codePrompts.toLocaleString()}</td>
+                      <td className="num num--narrow">{m.coworkPrompts.toLocaleString()}</td>
+                      <td className="num num--narrow">{m.codePrompts.toLocaleString()}</td>
                       <td className="num">{formatCost(m.coworkCostCents)}</td>
                       <td className="num">{formatCost(m.codeCostCents)}</td>
                       <td className="num">
@@ -116,7 +116,7 @@ export default async function MembersPage(props: {
                       <td className="num">{activeDays}</td>
                       <td className="num">{formatCost(maxDayCostCents)}</td>
                       <td
-                        className="num"
+                        className="num num--narrow"
                         style={isCapped ? { color: "var(--color-warning)", fontWeight: 600 } : undefined}
                       >
                         {apiErrorCount}
