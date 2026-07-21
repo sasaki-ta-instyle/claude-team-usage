@@ -6,7 +6,28 @@ import {
   memberActivitySignals,
 } from "@/lib/cowork-queries";
 import { recommendSeat, SEAT_RECO_META } from "@/lib/seat-recommendation";
-import { formatCost, formatTokens, isoDateMinusDays } from "@/lib/format";
+import {
+  formatJpyFromCents,
+  formatTokens,
+  formatUsd,
+  isoDateMinusDays,
+} from "@/lib/format";
+
+// コスト列は狭いので $X / ¥Y を 2 段に組む。強調は totalCost のみ。
+function CostStack({ cents, emphasize = false }: { cents: number; emphasize?: boolean }) {
+  return (
+    <>
+      {emphasize ? (
+        <strong>{formatUsd(cents)}</strong>
+      ) : (
+        formatUsd(cents)
+      )}
+      <div style={{ color: "var(--color-text-muted)", fontSize: 11, marginTop: 2 }}>
+        {formatJpyFromCents(cents)}
+      </div>
+    </>
+  );
+}
 
 export const dynamic = "force-dynamic";
 
@@ -108,13 +129,13 @@ export default async function MembersPage(props: {
                       </td>
                       <td className="num num--narrow">{m.coworkPrompts.toLocaleString()}</td>
                       <td className="num num--narrow">{m.codePrompts.toLocaleString()}</td>
-                      <td className="num">{formatCost(m.coworkCostCents)}</td>
-                      <td className="num">{formatCost(m.codeCostCents)}</td>
+                      <td className="num"><CostStack cents={m.coworkCostCents} /></td>
+                      <td className="num"><CostStack cents={m.codeCostCents} /></td>
                       <td className="num">
-                        <strong>{formatCost(m.totalCostCents)}</strong>
+                        <CostStack cents={m.totalCostCents} emphasize />
                       </td>
                       <td className="num">{activeDays}</td>
-                      <td className="num">{formatCost(maxDayCostCents)}</td>
+                      <td className="num"><CostStack cents={maxDayCostCents} /></td>
                       <td
                         className="num num--narrow"
                         style={isCapped ? { color: "var(--color-warning)", fontWeight: 600 } : undefined}
