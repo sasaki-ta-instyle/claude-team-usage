@@ -6,7 +6,7 @@ import {
   memberActivitySignals,
 } from "@/lib/cowork-queries";
 import { recommendSeat, SEAT_RECO_META } from "@/lib/seat-recommendation";
-import { formatCost, formatJpyFromCents, formatTokens, isoDateMinusDays } from "@/lib/format";
+import { formatCost, formatTokens, isoDateMinusDays } from "@/lib/format";
 
 export const dynamic = "force-dynamic";
 
@@ -108,10 +108,10 @@ export default async function MembersPage(props: {
                       </td>
                       <td className="num num--narrow">{m.coworkPrompts.toLocaleString()}</td>
                       <td className="num num--narrow">{m.codePrompts.toLocaleString()}</td>
-                      <td className="num">{formatJpyFromCents(m.coworkCostCents)}</td>
-                      <td className="num">{formatJpyFromCents(m.codeCostCents)}</td>
+                      <td className="num">{formatCost(m.coworkCostCents)}</td>
+                      <td className="num">{formatCost(m.codeCostCents)}</td>
                       <td className="num">
-                        <strong>{formatJpyFromCents(m.totalCostCents)}</strong>
+                        <strong>{formatCost(m.totalCostCents)}</strong>
                       </td>
                       <td className="num">{activeDays}</td>
                       <td className="num">{formatCost(maxDayCostCents)}</td>
