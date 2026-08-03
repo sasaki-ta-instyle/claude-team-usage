@@ -13,6 +13,7 @@ const DESCRIPTION =
   "instyle group の Claude Team プラン使用量を可視化し、Premium / Standard の配分を判断する管理ダッシュボード";
 
 export const metadata: Metadata = {
+  robots: { index: false, follow: false, nocache: true },
   metadataBase: new URL(SITE_URL),
   title: TITLE,
   description: DESCRIPTION,
