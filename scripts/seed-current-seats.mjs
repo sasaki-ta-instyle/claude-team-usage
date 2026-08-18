@@ -16,17 +16,16 @@ const { Pool } = pg;
 
 // [email, seatType] — seatType は 'premium' | 'standard' | null (未割り当て)
 const SEATS = [
-  // Premium (9)
+  // Premium (6)
   ["kashiwagi@instyle.group", "premium"],
   ["sasaki-ta@instyle.group", "premium"],
-  ["nakano@instyle.group", "premium"],
-  ["wakasugi@instyle.group", "premium"],
   ["wada@instyle.group", "premium"],
-  ["yasuda-re@instyle.group", "premium"],
   ["yamada@instyle.group", "premium"],
   ["tanabe@instyle.group", "premium"],
   ["tajimi@mebiusseiyaku.co.jp", "premium"],
-  // Standard (20)
+  // Standard (22)
+  ["nakano@instyle.group", "standard"],
+  ["wakasugi@instyle.group", "standard"],
   ["horiuchi-eri@instyle.group", "standard"],
   ["hasegawa@instyle.group", "standard"],
   ["ozaki@instyle.group", "standard"],
@@ -47,8 +46,6 @@ const SEATS = [
   ["nakazawa-mi@mebiusseiyaku.co.jp", "standard"],
   ["tsumoto@mebiusseiyaku.co.jp", "standard"],
   ["suzuki-yuka@mebiusseiyaku.co.jp", "standard"],
-  // 未割り当て (1)
-  ["takagiwa@instyle.group", null],
 ];
 
 const DRY_RUN = process.argv.includes("--dry-run");
