@@ -30,7 +30,11 @@ function rangeBounds(from?: Date, to?: Date) {
 
 // ダッシュボード上で非表示にしたい email。DB 側は保持したまま集計・表示から除外する。
 // 恒久対応（個人 gmail 側で Claude Code を打っている本人が org アカウントに切り替えるまでの措置）。
-const HIDDEN_EMAILS_LOWER = ["375tanabe.o8@gmail.com"];
+const HIDDEN_EMAILS_LOWER = [
+  "375tanabe.o8@gmail.com",
+  "yasuda-re@instyle.group",
+  "takagiwa@instyle.group",
+];
 const hiddenEmailFilter = sql`coalesce(lower(${schema.coworkEvents.userEmail}), '') not in (${sql.join(
   HIDDEN_EMAILS_LOWER.map((e) => sql`${e}`),
   sql`, `
