@@ -369,24 +369,26 @@ export async function eventsDataStart(): Promise<Date | null> {
 
 // ─── 稼働・上限シグナル（seat 推奨の判定材料） ─────────────────────
 // - activeDays / maxDayCostCents: 日次（JST）の稼働日数と最大日コスト
-// - rateLimitDays / rateLimitHits: 制限到達（api_error かつ HTTP 429）があった JST 日と、
+// - rateLimitHits: 制限到達（api_error かつ HTTP 429）があった JST 日と、
 //   その日が勤務時間内 / 時間外 / 土日のどれか。OAuth 切れ・バージョン不一致・通信断などの api_error は数えない
+// - workCostCents: 勤務時間（平日 10–18 時 JST）の利用額。土日・時間外を除いたコスト
 // - workPeaksCents: 勤務時間（平日 10–18 時 JST）の各日について、
-//   「その時点の直前 5 時間の利用額」の最大値（Standard / Premium の上限は 5h ローリング窓）
+//   「その時点の直前 5 時間の利用額」の最大値（Standard / Premium の上限は 5h ローリング窓）。
+//   窓の中も勤務時間内の利用だけを足す（朝 10:30 の窓に早朝・前夜の利用を混ぜない）
 
 export type MemberSeatSignals = {
   activeDays: number;
   maxDayCostCents: number;
-  rateLimitDays: number;
   rateLimitHits: RateLimitHit[];
+  workCostCents: number;
   workPeaksCents: number[];
 };
 
 const EMPTY_SIGNALS: MemberSeatSignals = {
   activeDays: 0,
   maxDayCostCents: 0,
-  rateLimitDays: 0,
   rateLimitHits: [],
+  workCostCents: 0,
   workPeaksCents: [],
 };
 
@@ -402,7 +404,6 @@ export async function memberSeatSignals(opts: {
       out.set(m.email.toLowerCase(), {
         activeDays,
         maxDayCostCents: Math.round(perDay * 1.6),
-        rateLimitDays: m.apiErrorCount >= 2 ? m.apiErrorCount : 0,
         rateLimitHits: (
           [
             { date: "2026-06-01", dow: "月", time: "18:42", slot: "after" },
@@ -410,6 +411,7 @@ export async function memberSeatSignals(opts: {
             { date: "2026-06-06", dow: "土", time: "11:20", slot: "weekend" },
           ] satisfies RateLimitHit[]
         ).slice(0, m.apiErrorCount >= 2 ? m.apiErrorCount : 0),
+        workCostCents: Math.round(m.totalCostCents * 0.7),
         workPeaksCents: Array.from({ length: Math.min(activeDays, 20) }, (_, i) =>
           Math.round(perDay * (0.4 + ((i * 37) % 10) / 10))
         ),
@@ -432,7 +434,10 @@ export async function memberSeatSignals(opts: {
              (occurred_at at time zone 'Asia/Tokyo') as jt,
              coalesce(cost_usd_cents, 0) as c,
              event_name,
-             status_code
+             status_code,
+             (extract(isodow from occurred_at at time zone 'Asia/Tokyo') <= 5
+              and extract(hour from occurred_at at time zone 'Asia/Tokyo') >= ${startHour}
+              and extract(hour from occurred_at at time zone 'Asia/Tokyo') < ${endHour}) as is_work
       from cowork_events
       where occurred_at >= ${fromD} and occurred_at <= ${toD}
         and user_email is not null
@@ -440,33 +445,28 @@ export async function memberSeatSignals(opts: {
         and coalesce(service_name, '') in ${services}
     ),
     daily as (
-      select u, jt::date as d, sum(c) as day_cents from ev group by 1, 2
+      select u, jt::date as d, sum(c) as day_cents, sum(c) filter (where is_work) as work_cents
+      from ev group by 1, 2
     ),
     win as (
       select u, jt,
              sum(c) over (partition by u order by t
                           range between interval '5 hours' preceding and current row) as w5
-      from ev where c > 0
+      from ev where c > 0 and is_work
     ),
     work_peak as (
-      select u, jt::date as d, max(w5) as peak from win
-      where extract(isodow from jt) <= 5
-        and extract(hour from jt) >= ${startHour} and extract(hour from jt) < ${endHour}
-      group by 1, 2
+      select u, jt::date as d, max(w5) as peak from win group by 1, 2
     ),
     hit_days as (
       select u, jt::date as d,
              min(jt) as first_jt,
-             min(jt) filter (where extract(isodow from jt) <= 5
-                               and extract(hour from jt) >= ${startHour}
-                               and extract(hour from jt) < ${endHour}) as first_work_jt
+             min(jt) filter (where is_work) as first_work_jt
       from ev
       where event_name = 'api_error' and status_code = 429
       group by 1, 2
     ),
     hits as (
       select u,
-             count(*) as hit_days,
              json_agg(json_build_object(
                'date', to_char(d, 'YYYY-MM-DD'),
                'dow', extract(isodow from d)::int,
@@ -480,7 +480,7 @@ export async function memberSeatSignals(opts: {
     select d.u as email,
            count(*)::int as active_days,
            coalesce(max(d.day_cents), 0)::bigint as max_day_cents,
-           coalesce((select hit_days from hits h where h.u = d.u), 0)::int as rate_limit_days,
+           coalesce(sum(d.work_cents), 0)::bigint as work_cost_cents,
            (select hit_list from hits h where h.u = d.u) as rate_limit_hits,
            coalesce((select array_agg(peak::bigint order by wp.d) from work_peak wp where wp.u = d.u), '{}') as work_peaks
     from daily d
@@ -492,8 +492,8 @@ export async function memberSeatSignals(opts: {
     out.set(email, {
       activeDays: Number(r.active_days ?? 0),
       maxDayCostCents: Number(r.max_day_cents ?? 0),
-      rateLimitDays: Number(r.rate_limit_days ?? 0),
       rateLimitHits: parseHits(r.rate_limit_hits),
+      workCostCents: Number(r.work_cost_cents ?? 0),
       workPeaksCents: ((r.work_peaks as Array<string | number> | null) ?? []).map(Number),
     });
   }

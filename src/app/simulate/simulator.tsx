@@ -12,6 +12,7 @@ import {
   recommendSeat,
   seatMonthlyUsd,
   seatSignals,
+  type RateLimitHit,
   type SeatPolicy,
   type SeatRecommendation,
 } from "@/lib/seat-recommendation";
@@ -26,7 +27,8 @@ type Member = {
   codeCostCents: number;
   coworkPrompts: number;
   codePrompts: number;
-  rateLimitDays: number;
+  rateLimitHits: RateLimitHit[];
+  workCostCents: number;
   workPeaksCents: number[];
 };
 
@@ -75,7 +77,7 @@ export function Simulator({
         totalCostCents: m.costCents,
         coworkPrompts: m.coworkPrompts,
         codePrompts: m.codePrompts,
-        rateLimitDays: m.rateLimitDays,
+        rateLimitHits: m.rateLimitHits,
         workPeaksCents: m.workPeaksCents,
       };
       let reco = recommendSeat(input, rangeDays, policy);
@@ -126,7 +128,8 @@ export function Simulator({
         <h2 style={{ marginTop: 0 }}>判定基準を設定する</h2>
         <p className="muted" style={{ fontSize: 12, marginTop: 0 }}>
           Premium と Standard の差は 5 時間ごとの利用上限。勤務時間（平日 10–18 時）に Standard の上限が
-          仕事を止めている人だけ Premium にする。どちらかの条件（月あたり）を満たすと Premium 推奨。
+          仕事を止めている人だけ Premium にする。土日・時間外の利用と制限到達は換算しない。
+          どちらかの条件（月あたり）を満たすと Premium 推奨。
         </p>
 
         <div className="flex-row" style={{ marginBottom: 14, flexWrap: "wrap" }}>
@@ -171,7 +174,7 @@ export function Simulator({
 
         <div className="flex-row" style={{ flexWrap: "wrap", gap: 16, fontSize: 13 }}>
           <label className="flex-row">
-            制限到達
+            勤務内の制限到達
             <input
               className="input"
               type="number"
@@ -295,7 +298,12 @@ export function Simulator({
                     <td className="num">{formatTokens(r.tokens)}</td>
                     <td className="num">{fmtCost(r.coworkCostCents)}</td>
                     <td className="num">{fmtCost(r.codeCostCents)}</td>
-                    <td className="num"><strong>{fmtCost(r.costCents)}</strong></td>
+                    <td className="num">
+                      <strong>{fmtCost(r.costCents)}</strong>
+                      <div className="muted" style={{ fontSize: 11, marginTop: 2 }}>
+                        （勤務内 {fmtUsd(r.workCostCents / 100)}）
+                      </div>
+                    </td>
                     <td>
                       <span className={`badge ${meta.badge}`}>{meta.label}</span>
                       <div className="muted" style={{ fontSize: 11, marginTop: 2 }}>

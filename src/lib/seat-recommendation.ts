@@ -2,10 +2,12 @@
 //
 // Premium と Standard の違いは「5 時間ローリング窓の利用上限」の高さ。勤務は 10–18 時（平日）なので、
 // 月のコスト総額よりも「勤務時間中に Standard の上限が仕事を止めているか」で判定する。
+// 土日・時間外の利用は Premium 判定に換算しない（制限到達も 5h 窓の利用額も勤務時間内の分だけ）。
 //
 //   premium              … 次のどちらか（月あたり）
-//                          ・制限到達（api_error かつ HTTP 429）が LIMIT_HIT_DAYS 日以上
-//                          ・勤務時間内に「直前 5 時間の利用額」が PEAK_CAP 以上に達した日が PEAK_DAYS 日以上
+//                          ・勤務時間内の制限到達（api_error かつ HTTP 429）が LIMIT_HIT_DAYS 日以上
+//                          ・勤務時間内の利用だけで数えた「直前 5 時間の利用額」が PEAK_CAP 以上に達した日が
+//                            PEAK_DAYS 日以上
 //                            （PEAK_CAP は Standard が実際に 429 になった直前 5h 利用額 ≈ $30–48 から置いた目安）
 //   api_direct_candidate … 月換算コスト < $10（Standard $25 を割る軽利用）
 //   unused               … コスト 0 かつプロンプト 0
@@ -21,7 +23,7 @@ export type SeatRecommendation =
   | "unused";
 
 export type SeatPolicy = {
-  limitHitDays: number; // 制限到達日数（月）がこれ以上なら Premium
+  limitHitDays: number; // 勤務時間内の制限到達日数（月）がこれ以上なら Premium
   peakCapCents: number; // 勤務時間内 5h 窓の利用額がこれ以上の日を「上限付近の日」とみなす
   peakDays: number; // 上限付近の日（月）がこれ以上なら Premium
 };
@@ -66,8 +68,8 @@ export type SeatRecoInput = {
   totalCostCents: number;
   coworkPrompts: number;
   codePrompts: number;
-  rateLimitDays: number; // 期間内の制限到達日数（JST 日付）
-  workPeaksCents: number[]; // 勤務時間内の各日の「直前 5h 利用額」の最大値
+  rateLimitHits: RateLimitHit[]; // 期間内の制限到達日（時間帯つき）。判定には slot=work だけ使う
+  workPeaksCents: number[]; // 勤務時間内の各日の「直前 5h 利用額（勤務時間内の分のみ）」の最大値
 };
 
 export const DAYS_PER_MONTH = 365.25 / 12;
@@ -108,7 +110,10 @@ export function seatSignals(
   const peakDays = input.workPeaksCents.filter((c) => c >= policy.peakCapCents).length;
   return {
     monthlyCostCents: monthlyCostCents(input.totalCostCents, rangeDays),
-    limitHitDaysPerMonth: perMonthDays(input.rateLimitDays, rangeDays),
+    limitHitDaysPerMonth: perMonthDays(
+      input.rateLimitHits.filter((h) => h.slot === "work").length,
+      rangeDays
+    ),
     peakDaysPerMonth: perMonthDays(peakDays, rangeDays),
     maxPeakCents: input.workPeaksCents.reduce((a, c) => Math.max(a, c), 0),
   };
@@ -144,7 +149,7 @@ export function recommendReason(
       return `月換算 ${usd(s.monthlyCostCents)}（< ${usd(API_DIRECT_CENTS)}）`;
     case "premium":
     case "standard":
-      return `制限到達 ${fmtDays(s.limitHitDaysPerMonth)} 日 / ${peakLabel} ${fmtDays(s.peakDaysPerMonth)} 日（月あたり）`;
+      return `勤務内の制限到達 ${fmtDays(s.limitHitDaysPerMonth)} 日 / ${peakLabel} ${fmtDays(s.peakDaysPerMonth)} 日（月あたり）`;
   }
 }
 

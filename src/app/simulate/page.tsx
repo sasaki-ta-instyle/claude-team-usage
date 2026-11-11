@@ -30,7 +30,8 @@ export default async function SimulatePage() {
       codeCostCents: m.codeCostCents,
       coworkPrompts: m.coworkPrompts,
       codePrompts: m.codePrompts,
-      rateLimitDays: m.rateLimitDays,
+      rateLimitHits: m.rateLimitHits,
+      workCostCents: m.workCostCents,
       workPeaksCents: m.workPeaksCents,
     }));
 

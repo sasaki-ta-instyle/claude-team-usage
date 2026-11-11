@@ -126,10 +126,11 @@ export default async function MembersPage(props: {
         。ロスター {rosterCount} 名。
         推奨 seat は「勤務時間（平日 {WORK_HOURS_JST.startHour}–{WORK_HOURS_JST.endHour} 時）に Standard の上限が仕事を止めているか」で判定。
         <strong>
-          月に 制限到達 {POLICY.limitHitDays} 日以上、または 勤務時間内に直前 5 時間の利用が{" "}
+          月に 勤務時間内の制限到達 {POLICY.limitHitDays} 日以上、または 勤務時間内に直前 5 時間の利用が{" "}
           {formatUsd(POLICY.peakCapCents)} 以上の日が {POLICY.peakDays} 日以上 = Premium 推奨
         </strong>{" "}
-        / それ以外 = Standard 維持（月コストが大きくても上限に当たらなければ Standard で足りる）/
+        / それ以外 = Standard 維持（月コストが大きくても上限に当たらなければ Standard で足りる）。
+        <strong>土日・時間外の利用と制限到達は Premium 判定に換算しない</strong>（合計コストの下の（勤務内 $X）が判定に使う分）/
         <strong>月換算 &lt; $10 = API 従量候補</strong> / プロンプト 0 = 未使用。
         制限到達は HTTP 429（レート制限）だけを数える（OAuth 切れ等のエラーは除外）。
         日ごとに <strong>勤務内</strong>（平日 {WORK_HOURS_JST.startHour}–{WORK_HOURS_JST.endHour} 時に到達）/
@@ -187,7 +188,8 @@ export default async function MembersPage(props: {
                   const meta = SEAT_RECO_META[reco];
                   const isApiDirect = reco === "api_direct_candidate";
                   const activeDays = m.activeDays;
-                  const isCapped = m.rateLimitDays > 0;
+                  // 強調は勤務時間内の到達があるときだけ（時間外・土日だけなら判定に効かないので通常色）
+                  const isCapped = m.rateLimitHits.some((h) => h.slot === "work");
                   const peakDays = m.workPeaksCents.filter((c) => c >= POLICY.peakCapCents).length;
                   const isHighActivity = activeDays >= HIGH_ACTIVITY_DAYS;
                   const currentSeat = m.seatType;
@@ -213,6 +215,13 @@ export default async function MembersPage(props: {
                       <td className="num"><CostStack cents={m.codeCostCents} /></td>
                       <td className="num">
                         <CostStack cents={m.totalCostCents} emphasize />
+                        <div
+                          className="muted"
+                          style={{ fontSize: 11, marginTop: 2 }}
+                          title="土日・時間外（平日 10–18 時以外）の利用を除いたコスト。Premium 判定はこちらを使う"
+                        >
+                          （勤務内 {formatUsd(m.workCostCents)}）
+                        </div>
                       </td>
                       <td className="num">{activeDays}</td>
                       <td className="num"><CostStack cents={m.maxDayCostCents} /></td>
@@ -220,7 +229,7 @@ export default async function MembersPage(props: {
                         className="num num--narrow"
                         style={isCapped ? { color: "var(--color-warning)", fontWeight: 600 } : undefined}
                       >
-                        {m.rateLimitDays}
+                        {m.rateLimitHits.length}
                         <RateLimitBreakdown hits={m.rateLimitHits} />
                       </td>
                       <td className="num">
