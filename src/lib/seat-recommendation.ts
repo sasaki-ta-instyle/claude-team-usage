@@ -50,29 +50,44 @@ export type SeatRecoInput = {
   codePrompts: number;
 };
 
-export function recommendSeat(input: SeatRecoInput): SeatRecommendation {
-  const totalPrompts = input.coworkPrompts + input.codePrompts;
-  if (input.totalCostCents === 0 && totalPrompts === 0) return "unused";
-  if (input.totalCostCents >= PREMIUM_THRESHOLD_CENTS) return "premium";
-  if (input.totalCostCents > 0 && input.totalCostCents < API_DIRECT_CENTS && totalPrompts > 0) {
-    return "api_direct_candidate";
-  }
-  return "standard";
+// 閾値（$100 / $10）は「月額」。集計期間が 1 ヶ月と異なる場合（7 日 / 90 日 / 当月途中）は
+// 期間合計を 1 日あたりに均して平均月長に換算してから比較する。
+export const DAYS_PER_MONTH = 365.25 / 12;
+const DAY_MS = 24 * 60 * 60 * 1000;
+
+// 換算に使う実効日数。from が実データ開始（dataStart）より前なら dataStart から数える
+// （生イベントは月次運用で削除されるため、無い期間で割ると過小評価になる）。最小 1 日。
+export function effectiveRangeDays(from: Date, to: Date, dataStart?: Date | null): number {
+  const start = dataStart && dataStart > from ? dataStart : from;
+  return Math.max(1, (to.getTime() - start.getTime()) / DAY_MS);
+}
+
+export function monthlyCostCents(totalCostCents: number, rangeDays: number): number {
+  if (!(rangeDays > 0)) throw new Error(`invalid rangeDays: ${rangeDays}`);
+  return Math.round((totalCostCents / rangeDays) * DAYS_PER_MONTH);
+}
+
+export function recommendSeat(input: SeatRecoInput, rangeDays: number): SeatRecommendation {
+  return recommendSeatForSimulator(input, rangeDays, PREMIUM_THRESHOLD_CENTS, {
+    treatApiDirectAsZero: true,
+  });
 }
 
 // シミュレータ用：閾値を可変にし、API 従量候補をシート集計から外すかを切り替える。
 export function recommendSeatForSimulator(
   input: SeatRecoInput,
+  rangeDays: number,
   thresholdCents: number,
   opts: { treatApiDirectAsZero: boolean }
 ): SeatRecommendation {
   const totalPrompts = input.coworkPrompts + input.codePrompts;
   if (input.totalCostCents === 0 && totalPrompts === 0) return "unused";
-  if (input.totalCostCents >= thresholdCents) return "premium";
+  const monthly = monthlyCostCents(input.totalCostCents, rangeDays);
+  if (monthly >= thresholdCents) return "premium";
   if (
     opts.treatApiDirectAsZero &&
-    input.totalCostCents > 0 &&
-    input.totalCostCents < API_DIRECT_CENTS &&
+    monthly > 0 &&
+    monthly < API_DIRECT_CENTS &&
     totalPrompts > 0
   ) {
     return "api_direct_candidate";

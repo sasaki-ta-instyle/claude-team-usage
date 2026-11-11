@@ -27,6 +27,11 @@ export const users = pgTable("user", {
   seatType: text("seat_type"), // 'premium' | 'standard' | null
   isAdmin: boolean("is_admin").notNull().default(false),
   displayName: text("display_name"),
+  // claude.ai 管理画面のメンバー CSV（ロスター）由来。CSV 取り込みで毎回全件再判定される。
+  // in_roster=false は「組織に居ない（CSV に無い）」= 集計の母集団から外す。
+  inRoster: boolean("in_roster").notNull().default(false),
+  rosterRole: text("roster_role"),
+  rosterSyncedAt: timestamp("roster_synced_at", { withTimezone: true }),
 });
 
 export const accounts = pgTable(

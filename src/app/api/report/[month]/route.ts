@@ -3,13 +3,9 @@ import path from "node:path";
 
 import { NextResponse } from "next/server";
 
-import {
-  combinedMemberSummary,
-  combinedOverall,
-} from "@/lib/cowork-queries";
+import { combinedOverall, rosterMemberSummary } from "@/lib/cowork-queries";
 import { formatCost, formatTokens } from "@/lib/format";
-import { usersRoster } from "@/lib/queries";
-import { recommendSeat } from "@/lib/seat-recommendation";
+import { effectiveRangeDays, recommendSeat } from "@/lib/seat-recommendation";
 
 export const dynamic = "force-dynamic";
 export const runtime = "nodejs";
@@ -79,11 +75,14 @@ export async function GET(
     );
   }
 
-  const [overall, members, roster] = await Promise.all([
+  const [overall, rosterRows] = await Promise.all([
     combinedOverall({ from: range.from, to: range.to }),
-    combinedMemberSummary({ from: range.from, to: range.to }),
-    usersRoster(),
+    rosterMemberSummary({ from: range.from, to: range.to }),
   ]);
+  const rangeDays = effectiveRangeDays(range.from, range.to);
+  const members = rosterRows
+    .filter((m) => m.totalCostCents > 0 || m.coworkPrompts + m.codePrompts > 0)
+    .sort((a, b) => b.totalCostCents - a.totalCostCents);
 
   const recoCounts = {
     premium: 0,
@@ -91,12 +90,9 @@ export async function GET(
     api_direct_candidate: 0,
     unused: 0,
   };
-  const memberByEmail = new Map(
-    members.map((m) => [m.email.toLowerCase(), m])
-  );
-  for (const m of members) recoCounts[recommendSeat(m)]++;
-  for (const u of roster) {
-    if (!memberByEmail.has(u.email.toLowerCase())) recoCounts.unused++;
+  // 母集団はロスター（シート保有者）。当月利用 0 の人は未使用に入る。
+  for (const m of rosterRows) {
+    if (m.inRoster) recoCounts[recommendSeat(m, rangeDays)]++;
   }
 
   const totalCost = formatCost(overall.totalCostCents).split(" / ");

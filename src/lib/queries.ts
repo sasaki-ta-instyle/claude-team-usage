@@ -1,7 +1,8 @@
-import { and, desc, gte, lte, sql } from "drizzle-orm";
+import { and, desc, eq, gte, lte, sql } from "drizzle-orm";
 
 import { db, schema } from "@/db/client";
 import { isoDateMinusDays, monthStartIso } from "@/lib/format";
+import { isHiddenEmail } from "@/lib/hidden-emails";
 import { estimateCostCents } from "@/lib/pricing";
 import {
   PREVIEW,
@@ -24,8 +25,8 @@ export type UserRosterEntry = {
   isAdmin: boolean;
 };
 
-// users テーブルの全件（Anthropic Admin API sync?source=users で投入される
-// シート保有者の正本）。/ ページの「未使用」KPI と /simulate の現在 seat 比較で使う。
+// 組織ロスター（claude.ai 管理画面のメンバー CSV 取り込みで in_roster=true になった人）。
+// 非表示 email は除く。rosterMemberSummary が events 集計と突き合わせる母集団。
 export async function usersRoster(): Promise<UserRosterEntry[]> {
   if (PREVIEW) {
     return mockMembers().map((m) => ({
@@ -35,13 +36,28 @@ export async function usersRoster(): Promise<UserRosterEntry[]> {
       isAdmin: m.isAdmin,
     }));
   }
-  const rows = await db.select().from(schema.users);
-  return rows.map((u) => ({
-    email: u.email.toLowerCase(),
-    displayName: u.displayName ?? u.name ?? null,
-    seatType: u.seatType ?? null,
-    isAdmin: u.isAdmin ?? false,
-  }));
+  const rows = await db
+    .select()
+    .from(schema.users)
+    .where(eq(schema.users.inRoster, true));
+  return rows
+    .filter((u) => !isHiddenEmail(u.email))
+    .map((u) => ({
+      email: u.email.toLowerCase(),
+      displayName: u.displayName ?? u.name ?? null,
+      seatType: u.seatType ?? null,
+      isAdmin: u.isAdmin ?? false,
+    }));
+}
+
+// 直近のロスター CSV 取り込み時刻（未実施なら null）
+export async function rosterLastSyncedAt(): Promise<Date | null> {
+  if (PREVIEW) return null;
+  const rows = await db
+    .select({ v: sql<string | null>`max(${schema.users.rosterSyncedAt})` })
+    .from(schema.users);
+  const v = rows[0]?.v;
+  return v ? new Date(v) : null;
 }
 
 export type MemberRow = {

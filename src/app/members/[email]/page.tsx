@@ -83,8 +83,8 @@ export default async function MemberDetailPage(props: {
         <h2 style={{ marginTop: 0 }}>Seat タグ</h2>
         <p className="muted" style={{ fontSize: 12 }}>
           現在: <strong>{user?.seatType ?? "未設定"}</strong>。
-          Admin API が seat 種別を返したら、次回 sync で自動上書きします。
-          手動値は API が値を返さないときのみ保持されます。
+          正本は claude.ai 管理画面のメンバー CSV です（<Link href="/members">メンバー</Link> で取り込み）。
+          ここでの手動変更は、次回の CSV 取り込みで CSV の値に上書きされます。
         </p>
         <SeatForm email={email} current={user?.seatType ?? null} />
       </section>

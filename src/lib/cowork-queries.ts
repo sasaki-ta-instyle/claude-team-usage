@@ -1,7 +1,9 @@
 import { and, desc, gte, lte, sql } from "drizzle-orm";
 
 import { db, schema } from "@/db/client";
+import { HIDDEN_EMAILS_LOWER } from "@/lib/hidden-emails";
 import { PREVIEW } from "@/lib/preview";
+import { usersRoster } from "@/lib/queries";
 import {
   COWORK_MOCK_MEMBERS,
   mockCoworkOverall,
@@ -28,13 +30,6 @@ function rangeBounds(from?: Date, to?: Date) {
   return { fromD, toD };
 }
 
-// ダッシュボード上で非表示にしたい email。DB 側は保持したまま集計・表示から除外する。
-// 恒久対応（個人 gmail 側で Claude Code を打っている本人が org アカウントに切り替えるまでの措置）。
-const HIDDEN_EMAILS_LOWER = [
-  "375tanabe.o8@gmail.com",
-  "yasuda-re@instyle.group",
-  "takagiwa@instyle.group",
-];
 const hiddenEmailFilter = sql`coalesce(lower(${schema.coworkEvents.userEmail}), '') not in (${sql.join(
   HIDDEN_EMAILS_LOWER.map((e) => sql`${e}`),
   sql`, `
@@ -290,6 +285,79 @@ export async function combinedOverall(opts: { from?: Date; to?: Date }) {
   };
 }
 
+// ─── ロスター基準のメンバー集計（/, /members, /simulate, 月次レポート共通） ───
+// events 集計（combinedMemberSummary）に組織ロスターを外側結合する。
+// - ロスター在籍でイベント 0 件の人も 0 値で出す（→ 推奨は「未使用」）
+// - ロスター外だが使用実績のある email も消さずに inRoster=false で残す
+
+export type RosterMemberRow = CombinedMemberRow & {
+  displayName: string | null;
+  seatType: "premium" | "standard" | null;
+  inRoster: boolean;
+};
+
+export async function rosterMemberSummary(opts: {
+  from?: Date;
+  to?: Date;
+}): Promise<RosterMemberRow[]> {
+  const [members, roster] = await Promise.all([
+    combinedMemberSummary(opts),
+    usersRoster(),
+  ]);
+  const rosterByEmail = new Map(roster.map((u) => [u.email.toLowerCase(), u]));
+  const seen = new Set<string>();
+  const rows: RosterMemberRow[] = members.map((m) => {
+    const key = m.email.toLowerCase();
+    seen.add(key);
+    const u = rosterByEmail.get(key);
+    return {
+      ...m,
+      displayName: u?.displayName ?? null,
+      seatType: toSeat(u?.seatType ?? null),
+      inRoster: Boolean(u),
+    };
+  });
+  for (const u of roster) {
+    if (seen.has(u.email)) continue;
+    rows.push({
+      email: u.email,
+      coworkCostCents: 0,
+      codeCostCents: 0,
+      totalCostCents: 0,
+      coworkPrompts: 0,
+      codePrompts: 0,
+      coworkTokens: 0,
+      codeTokens: 0,
+      totalTokens: 0,
+      firstSeen: null,
+      lastSeen: null,
+      displayName: u.displayName,
+      seatType: toSeat(u.seatType),
+      inRoster: true,
+    });
+  }
+  // ロスター在籍 → コスト降順、ロスター外は末尾
+  return rows.sort(
+    (a, b) =>
+      Number(b.inRoster) - Number(a.inRoster) || b.totalCostCents - a.totalCostCents
+  );
+}
+
+function toSeat(v: string | null): "premium" | "standard" | null {
+  return v === "premium" || v === "standard" ? v : null;
+}
+
+// 生イベント（cowork_events）が残っている最古時刻。月次運用で古い raw は削除されるため、
+// 期間プリセットがこれより前を指しても実データはここから。
+export async function eventsDataStart(): Promise<Date | null> {
+  if (PREVIEW) return null;
+  const rows = await db
+    .select({ min: sql<string | null>`min(${schema.coworkEvents.occurredAt})` })
+    .from(schema.coworkEvents);
+  const v = rows[0]?.min;
+  return v ? new Date(v) : null;
+}
+
 // ─── 日次稼働シグナル ─────────────────────────────────────────
 // rate limit reset（5 時間 rolling）は per-user カラムが取れないので、
 // 「日次のアクティビティ密度」と「api_error 回数」で制限到達を間接的に検知する。
@@ -358,27 +426,6 @@ export async function memberActivitySignals(opts: {
       maxDayCostCents: Number(r.maxDayCents ?? 0),
       apiErrorCount: Number(r.errorTotal ?? 0),
     });
-  }
-  return out;
-}
-
-// users テーブルの seat_type を email → seat_type の Map で返す。
-// メアドとティアだけで管理する運用のため、他カラムは触らない。
-// email は小文字化して返す（cowork_events / code_usage_daily 側と揃える）。
-export async function getSeatAssignments(): Promise<Map<string, "premium" | "standard" | null>> {
-  const out = new Map<string, "premium" | "standard" | null>();
-  if (PREVIEW) return out;
-  const rows = await db
-    .select({
-      email: schema.users.email,
-      seatType: schema.users.seatType,
-    })
-    .from(schema.users);
-  for (const r of rows) {
-    if (!r.email) continue;
-    const seat =
-      r.seatType === "premium" || r.seatType === "standard" ? r.seatType : null;
-    out.set(r.email.toLowerCase(), seat);
   }
   return out;
 }

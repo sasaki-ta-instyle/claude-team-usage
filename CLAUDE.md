@@ -97,7 +97,7 @@ pm2 reload app-claude-team-usage --update-env
 
 ## デザインシステム
 
-**Liquid Glass**（`~/Workspace/design-system_liquid/`）に準拠。warm glass を主役にした半透明 + backdrop-filter のダッシュボード。`src/app/globals.css` に tokens / scene-bg / glass-panel / card / btn を実装、`src/app/layout.tsx` で scene-bg と app shell（sticky header + nav + main）を組む。チャートは recharts、液体パレット `#35362D / #D4772C` を使用。
+**Liquid Glass**（`~/Workspace/design-system/design-system_liquid/`）に準拠。warm glass を主役にした半透明 + backdrop-filter のダッシュボード。`src/app/globals.css` に tokens / scene-bg / glass-panel / card / btn を実装、`src/app/layout.tsx` で scene-bg と app shell（sticky header + nav + main）を組む。チャートは recharts、液体パレット `#35362D / #D4772C` を使用。
 
 ## プロジェクト概要
 
@@ -117,14 +117,15 @@ instyle group が契約する **Claude Team プラン**の使用量を可視化�
 |---|---|---|
 | `/login` | 共通パスワード入力（唯一の未認証 OK ページ） | — |
 | `/` | KPI 7 枚（コスト内訳 / アクティブ数 / トークン / Premium 推奨 / Standard 維持 / API 従量候補 / 未使用） | **OTel push 統合**（Cowork + Code）＋ `users` roster |
-| `/members?days=N` | メンバー別テーブル（Cowork / Code / 合計 / 稼働日 / 最大日コスト / api_error / 推奨 seat 4 値）。**合計コスト一本で判定**（≥ $100 = Premium / $10–$100 = Standard / < $10 = API 従量 / プロンプト 0 = 未使用）。副バッジで `制限到達`（api_error 観測）/ `高稼働`（≥ 15 日）を表示 | **OTel push 統合**＋稼働シグナル |
-| `/members/[email]` | 日次推移チャート、seat 種別の手動編集 | Anthropic Admin API（旧、保留中） |
+| `/members?days=N` | ロスター全員＋利用実績のあるロスター外 email のテーブル（Cowork / Code / 合計 / 稼働日 / 最大日コスト / api_error / 現状 tier / 推奨 seat 4 値）。**合計コストを月額換算して判定**（≥ $100 = Premium / $10–$100 = Standard / < $10 = API 従量 / プロンプト 0 = 未使用）。副バッジで `制限到達`（api_error 観測）/ `高稼働`（≥ 15 日）を表示。上部にロスター CSV 取り込みフォーム（admin） | **OTel push 統合**＋稼働シグナル＋ロスター |
+| `/members/[email]` | 日次推移チャート、seat 種別の手動編集（次回 CSV 取り込みで上書き） | Anthropic Admin API（旧、保留中） |
 | `/cowork?days=N` | Cowork 単体の利用集計 | OTel push（service.name=cowork） |
 | `/code-otel?days=N` | Claude Code CLI 単体の利用集計 | OTel push（service.name=claude-code） |
 | `/api-messages?days=N` | コンソール API：実課金額（プロジェクト=Workspace 別 / 日次推移 / モデル別 / コスト種別）＋ トークン明細 | Anthropic Admin API（Cost Report + Messages） |
-| `/simulate` | Premium / Standard 配分シミュレーション（**既定閾値 $100 = 損益分岐**、API 従量候補 → 集計外 トグル付き） | **OTel push 統合**＋ `users` roster |
+| `/simulate` | Premium / Standard 配分シミュレーション（**既定閾値 $100 = 損益分岐**、月額換算で判定、API 従量候補 → 集計外 トグル付き） | **OTel push 統合**＋ロスター |
 | `/sync-log` | 直近 50 件の Admin API 取り込み履歴 | Anthropic Admin API |
 | `/api/sync?source=code|messages|cost|workspaces|users|all` | Bearer SYNC_TOKEN 必須の取り込みエンドポイント | — |
+| `POST /api/roster` | Bearer SYNC_TOKEN 必須。本文にロスター CSV（text/csv）。`/members` のフォームと同じ処理 | claude.ai 管理画面のメンバー CSV |
 | `/api/otel/v1/logs` / `/api/otel/logs/v1/logs` | OTel push 受信（Cowork / Claude Code 共通） | — |
 | `/api/health` | health check | — |
 
@@ -133,6 +134,19 @@ instyle group が契約する **Claude Team プラン**の使用量を可視化�
 - **メイン画面（`/`, `/members`, `/simulate`）は OTel push 統合**を主軸とする。Cowork（admin > Monitoring）と Claude Code CLI（env vars）の両方から `/api/otel/v1/logs` に push されたイベントを `cowork_events` テーブルに保存し、`raw->'resource'->>'service.name'` で振り分け
 - Anthropic Admin API（pull）は claude.ai SSO ユーザーが少ない（Team プランの仕様で admin role 2 名のみ取得可能）ため、メイン集計には使わない。`/api-messages` と `/sync-log` のみで参照
 - Chat（claude.ai UI）の per-user 使用量は **取得不可**（Enterprise Analytics API 限定）
+
+### ロスター（メンバー / シート tier）の正本
+
+- **正本は claude.ai 管理画面 → メンバー の CSV エクスポート**（`Name, Email, Role, Status, Seat Tier`）。Admin API は Team プランだと admin 2 名分しか返らないため、tier の正本にしない
+- 取り込み: `/members` 上部のフォーム（admin）または `POST /api/roster`。実装は `src/lib/roster-import.ts` 1 本
+- 反映ルール: CSV にいる人 → `user.in_roster=true`・`seat_type` を CSV 通り（Unassigned は null）・`name`/`roster_role` 更新。CSV に無い既存行 → `in_roster=false`・`seat_type=null`（行は消さない）
+- fail-closed: 必須列欠落 / 未知の Seat Tier / Email 重複・不正 / 0 件 CSV は全体を拒否し DB を変更しない。成否は `sync_log`（source=`roster`）に残る
+- 集計の母集団: `rosterMemberSummary`（`src/lib/cowork-queries.ts`）が OTel 集計にロスターを外側結合する。`/`・`/members`・`/simulate`・月次レポートはすべてこれを使う。非表示 email（`src/lib/hidden-emails.ts`）はロスターからも除外
+- **運用**: メンバー増減・tier 変更のたび（最低でも月初）に CSV を書き出して取り込む
+
+### 推奨 seat の月額換算
+
+閾値（$100 / $10）は月額。集計期間の合計コストを「実効日数」で割り、平均月長（365.25/12 日）を掛けて比較する（`effectiveRangeDays` / `monthlyCostCents`、`src/lib/seat-recommendation.ts`）。実効日数は期間開始と生イベントの最古時刻（月次運用で古い raw は削除される）の遅い方から数える。当月途中の `/`・`/simulate` は日割りの月額ペース。
 
 ### OTel イベント受信（重要）
 

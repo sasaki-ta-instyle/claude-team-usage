@@ -42,9 +42,11 @@ function fmtUsd(v: number) {
 
 export function Simulator({
   members,
+  rangeDays,
   jpyPerUsd,
 }: {
   members: Member[];
+  rangeDays: number;
   jpyPerUsd: number;
 }) {
   const [threshold, setThreshold] = useState<number>(DEFAULT_THRESHOLD);
@@ -73,6 +75,7 @@ export function Simulator({
           coworkPrompts: m.coworkPrompts,
           codePrompts: m.codePrompts,
         },
+        rangeDays,
         thresholdCents,
         { treatApiDirectAsZero }
       );
@@ -114,14 +117,14 @@ export function Simulator({
       totalCurrentCost,
       deltaUsd: totalPlanCost - totalCurrentCost,
     };
-  }, [members, threshold, treatApiDirectAsZero]);
+  }, [members, rangeDays, threshold, treatApiDirectAsZero]);
 
   return (
     <>
       <section className="glass-panel">
         <h2 style={{ marginTop: 0 }}>閾値を設定する</h2>
         <p className="muted" style={{ fontSize: 12, marginTop: 0 }}>
-          月コスト（Cowork + Code 合算）がこの値以上のメンバーを Premium 推奨と判定します。
+          月換算コスト（Cowork + Code 合算、当月途中は日割りで月額に換算）がこの値以上のメンバーを Premium 推奨と判定します。
           損益分岐は <strong>$100</strong>（差額 $100/seat/月の回収ライン）。
         </p>
 

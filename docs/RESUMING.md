@@ -17,7 +17,7 @@
 | ConoHa デプロイ先 | `/var/www/app/claude-team-usage/` |
 | 共有 env | `/var/www/_shared/apps/app-claude-team-usage.env`（chmod 600） |
 | PM2 名 | `app-claude-team-usage` |
-| ポート | `3009` |
+| ポート | `3011` |
 | Healthcheck | `/claude-team-usage/api/health` |
 | USE_DB | `true` |
 
@@ -117,7 +117,7 @@ ssh conoha-root   'whoami'  # → root
 # pnpm migrate
 
 pnpm dev
-# → http://localhost:3009/claude-team-usage/ にアクセス
+# → http://localhost:3000/claude-team-usage/ にアクセス
 ```
 
 ---
@@ -191,6 +191,7 @@ GitHub Actions 失敗時は workflow が自動ロールバックする。
 |---|---|---|
 | 1 | `/api-messages` にコンソール API 実課金（Cost Report）の可視化を追加。Workspace別 / 日次推移 / モデル別 / コスト種別。新テーブル `cost_report_daily` + `workspaces`（migration `0002`）、sync `source=cost\|workspaces`（`source=all` に内包＝cron 変更不要） | 実装済（本番反映時に migration 適用 → 初回 `?source=cost` 取り込み必要） |
 | 2 | 残りクレジット（プリペイド残高）表示 | 見送り（Admin API で取得不可） |
+| 3 | ロスター（メンバー / tier）を claude.ai 管理画面の CSV 取り込みで管理（`/members` フォーム or `POST /api/roster`、migration `0005`） | 実装済（メンバー増減・tier 変更時に CSV を取り込む運用） |
 
 ---
 

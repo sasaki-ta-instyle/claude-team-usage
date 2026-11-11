@@ -4,11 +4,11 @@ import { redirect } from "next/navigation";
 import { auth } from "@/lib/auth";
 import { PREVIEW } from "@/lib/preview";
 import {
-  combinedMemberSummary,
   combinedOverall,
+  eventsDataStart,
+  rosterMemberSummary,
 } from "@/lib/cowork-queries";
-import { usersRoster } from "@/lib/queries";
-import { recommendSeat } from "@/lib/seat-recommendation";
+import { effectiveRangeDays, recommendSeat } from "@/lib/seat-recommendation";
 import {
   formatCost,
   formatTokens,
@@ -29,11 +29,16 @@ export default async function DashboardPage() {
   const from = new Date(`${fromDate}T00:00:00Z`);
   const to = new Date();
 
-  const [overall, members, roster] = await Promise.all([
+  const [overall, rosterRows, dataStart] = await Promise.all([
     combinedOverall({ from, to }),
-    combinedMemberSummary({ from, to }),
-    usersRoster(),
+    rosterMemberSummary({ from, to }),
+    eventsDataStart(),
   ]);
+  const rangeDays = effectiveRangeDays(from, to, dataStart);
+  // 上位表示は「当月に利用があった人」（ロスター外も含む）をコスト順で
+  const members = rosterRows
+    .filter((m) => m.totalCostCents > 0 || m.coworkPrompts + m.codePrompts > 0)
+    .sort((a, b) => b.totalCostCents - a.totalCostCents);
 
   const recoCounts = {
     premium: 0,
@@ -41,12 +46,9 @@ export default async function DashboardPage() {
     api_direct_candidate: 0,
     unused: 0,
   };
-  const memberByEmail = new Map(members.map((m) => [m.email.toLowerCase(), m]));
-  for (const m of members) recoCounts[recommendSeat(m)]++;
-  // シート保有者で当月イベント 0 の人は events 集計に出てこないので、
-  // roster と突き合わせて未使用にカウントする。
-  for (const u of roster) {
-    if (!memberByEmail.has(u.email)) recoCounts.unused++;
+  // 推奨 seat の内訳はロスター（シート保有者）が母集団。当月イベント 0 の人は未使用に入る。
+  for (const m of rosterRows) {
+    if (m.inRoster) recoCounts[recommendSeat(m, rangeDays)]++;
   }
 
   const [costUsd, costJpy] = formatCost(overall.totalCostCents).split(" / ");

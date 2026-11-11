@@ -1,14 +1,20 @@
 import Link from "next/link";
 
 import {
-  combinedMemberSummary,
-  getSeatAssignments,
+  eventsDataStart,
   memberActivitySignals,
+  rosterMemberSummary,
 } from "@/lib/cowork-queries";
-import { recommendSeat, SEAT_RECO_META } from "@/lib/seat-recommendation";
+import { rosterLastSyncedAt } from "@/lib/queries";
+import {
+  effectiveRangeDays,
+  monthlyCostCents,
+  recommendSeat,
+  SEAT_RECO_META,
+} from "@/lib/seat-recommendation";
+import { RosterUpload } from "./roster-upload";
 import {
   formatJpyFromCents,
-  formatTokens,
   formatUsd,
   isoDateMinusDays,
 } from "@/lib/format";
@@ -48,18 +54,28 @@ export default async function MembersPage(props: {
   const toDate = isoDateMinusDays(0);
   const from = new Date(`${fromDate}T00:00:00Z`);
   const to = new Date();
-  const [members, signals, seats] = await Promise.all([
-    combinedMemberSummary({ from, to }),
+  const [members, signals, dataStart, lastSynced] = await Promise.all([
+    rosterMemberSummary({ from, to }),
     memberActivitySignals({ from, to }),
-    getSeatAssignments(),
+    eventsDataStart(),
+    rosterLastSyncedAt(),
   ]);
+  const rangeDays = effectiveRangeDays(from, to, dataStart);
+  const dataStartIso = dataStart && dataStart > from ? isoDateJst(dataStart) : null;
+  const rosterCount = members.filter((m) => m.inRoster).length;
 
   return (
     <>
       <h1 className="page-title">メンバー</h1>
       <p className="page-subtitle">
-        期間: <strong>{fromDate}</strong> – <strong>{toDate}</strong>。
-        Cowork + Code（OTel push）の合算コストで判定。
+        期間: <strong>{fromDate}</strong> – <strong>{toDate}</strong>
+        {dataStartIso ? (
+          <>
+            （生イベントは月次運用で古い分を削除済みのため、実データは <strong>{dataStartIso}</strong> 以降）
+          </>
+        ) : null}
+        。ロスター {rosterCount} 名。
+        Cowork + Code（OTel push）の合算コストを<strong>月額に換算</strong>して判定。
         <strong>月 ≥ $100 = Premium 推奨</strong> / <strong>$10 – $100 = Standard 維持</strong> /
         <strong>月 &lt; $10 = API 従量候補</strong> / プロンプト 0 = 未使用。
         <strong>制限到達回数</strong>列（api_error 観測数）で rate limit cap への当たり方を判断、
@@ -79,6 +95,8 @@ export default async function MembersPage(props: {
           </Link>
         ))}
       </div>
+
+      <RosterUpload lastSyncedAt={lastSynced ? formatJst(lastSynced) : null} />
 
       <div className="glass-panel">
         {members.length === 0 ? (
@@ -106,7 +124,8 @@ export default async function MembersPage(props: {
               </thead>
               <tbody>
                 {members.map((m) => {
-                  const reco = recommendSeat(m);
+                  const reco = recommendSeat(m, rangeDays);
+                  const monthly = monthlyCostCents(m.totalCostCents, rangeDays);
                   const meta = SEAT_RECO_META[reco];
                   const isApiDirect = reco === "api_direct_candidate";
                   const sig = signals.get(m.email.toLowerCase());
@@ -115,7 +134,7 @@ export default async function MembersPage(props: {
                   const apiErrorCount = sig?.apiErrorCount ?? 0;
                   const isCapped = apiErrorCount > 0;
                   const isHighActivity = activeDays >= HIGH_ACTIVITY_DAYS;
-                  const currentSeat = seats.get(m.email.toLowerCase()) ?? null;
+                  const currentSeat = m.seatType;
                   const overInvest =
                     currentSeat === "premium" && reco !== "premium";
                   const underInvest =
@@ -124,8 +143,13 @@ export default async function MembersPage(props: {
                     <tr key={m.email} className={isApiDirect ? "row-warn" : undefined}>
                       <td>
                         <Link href={`/members/${encodeURIComponent(m.email)}`}>
-                          {m.email}
+                          {m.displayName ?? m.email}
                         </Link>
+                        {m.displayName ? (
+                          <div className="muted" style={{ fontSize: 11, marginTop: 2 }}>
+                            {m.email}
+                          </div>
+                        ) : null}
                       </td>
                       <td className="num num--narrow">{m.coworkPrompts.toLocaleString()}</td>
                       <td className="num num--narrow">{m.codePrompts.toLocaleString()}</td>
@@ -143,7 +167,14 @@ export default async function MembersPage(props: {
                         {apiErrorCount}
                       </td>
                       <td>
-                        {currentSeat === "premium" ? (
+                        {!m.inRoster ? (
+                          <span
+                            className="badge badge-warning"
+                            title="claude.ai 管理画面のメンバー CSV に居ない email（個人アカウント・退職者など）"
+                          >
+                            ロスター外
+                          </span>
+                        ) : currentSeat === "premium" ? (
                           <span className="badge badge-success">Premium</span>
                         ) : currentSeat === "standard" ? (
                           <span className="badge badge-info">Standard</span>
@@ -179,11 +210,11 @@ export default async function MembersPage(props: {
                       </td>
                       <td>
                         <span className={`badge ${meta.badge}`}>{meta.label}</span>
-                        {meta.helper ? (
-                          <div className="muted" style={{ fontSize: 11, marginTop: 2 }}>
-                            {meta.helper}
-                          </div>
-                        ) : null}
+                        <div className="muted" style={{ fontSize: 11, marginTop: 2 }}>
+                          {reco === "unused"
+                            ? meta.helper
+                            : `月換算 ${formatUsd(monthly)}（${meta.helper}）`}
+                        </div>
                         {isHighActivity ? (
                           <div style={{ marginTop: 4, display: "flex", gap: 4, flexWrap: "wrap" }}>
                             <span className="badge badge-accent" title={`過去 ${range} 日のうち ${activeDays} 日アクティブ`}>
@@ -202,4 +233,12 @@ export default async function MembersPage(props: {
       </div>
     </>
   );
+}
+
+function isoDateJst(d: Date): string {
+  return new Date(d.getTime() + 9 * 60 * 60 * 1000).toISOString().slice(0, 10);
+}
+
+function formatJst(d: Date): string {
+  return d.toLocaleString("ja-JP", { timeZone: "Asia/Tokyo" });
 }
