@@ -78,6 +78,8 @@ export default async function middleware(req: NextRequest) {
 
 export const config = {
   matcher: [
+    // basePath 直下（/claude-team-usage、末尾スラッシュなし）は下のパターンに一致しないので明示する
+    "/",
     "/((?!_next/|.*\\.(?:png|jpg|jpeg|svg|ico|webp|gif|woff2?|ttf|css|js|map)$).*)",
   ],
 };
