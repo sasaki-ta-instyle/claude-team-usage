@@ -12,6 +12,14 @@ import {
   viewerToken,
 } from "@/lib/viewer-pass";
 
+const BASE_PATH = "/claude-team-usage";
+const PUBLIC_ORIGIN = "https://app.instyle.group";
+
+// Origin ヘッダは http(s)://host[:port] の形だけ受け付ける（それ以外は公開 origin に固定）
+function trustedOrigin(origin: string | null): string {
+  return origin && /^https?:\/\/[A-Za-z0-9.-]+(:\d+)?$/.test(origin) ? origin : PUBLIC_ORIGIN;
+}
+
 export type UnlockState = { error: string | null };
 
 // 総当たり対策: IP ごとに 10 分で 5 回まで失敗可、超えたら 10 分ロック。
@@ -72,5 +80,10 @@ export async function unlock(_prev: UnlockState, formData: FormData): Promise<Un
     path: "/claude-team-usage",
     maxAge: VIEWER_COOKIE_MAX_AGE,
   });
-  redirect(safeFrom(String(formData.get("from") ?? "/")));
+  // redirect() に相対パスを渡すと、JavaScript 無効時の通常フォーム送信では basePath が付かず
+  // サイト直下（/members）へ飛んでしまう。公開 origin + basePath の絶対 URL にして両経路で揃える。
+  // origin は Next.js の server action が Host と一致を検査済みの Origin ヘッダを使い、無ければ固定値。
+  const h = await headers();
+  const origin = trustedOrigin(h.get("origin"));
+  redirect(`${origin}${BASE_PATH}${safeFrom(String(formData.get("from") ?? "/"))}`);
 }
