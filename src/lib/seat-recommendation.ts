@@ -51,6 +51,10 @@ export const RATE_LIMIT_SLOT_META: Record<RateLimitSlot, { label: string; badge:
 };
 export const API_DIRECT_CENTS = 1000; // $10
 
+// seat 配分の見直しに使う期間（直近 N 日）。日数系の基準（月 2 日・4 日）は 1 ヶ月分のデータを前提にしているので、
+// 当月途中（月初は数日分しかない）ではなく常に直近 30 日で判定する（/・/simulate・/members の既定）。
+export const SEAT_REVIEW_DAYS = 30;
+
 export const PREMIUM_MONTHLY_USD = 125;
 export const STANDARD_MONTHLY_USD = 25;
 

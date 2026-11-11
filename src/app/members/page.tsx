@@ -5,6 +5,7 @@ import { rosterLastSyncedAt } from "@/lib/queries";
 import { isAdminViewer } from "@/lib/viewer";
 import {
   DEFAULT_SEAT_POLICY,
+  SEAT_REVIEW_DAYS,
   RATE_LIMIT_SLOT_META,
   WORK_HOURS_JST,
   type RateLimitHit,
@@ -98,7 +99,7 @@ export default async function MembersPage(props: {
   searchParams: Promise<{ days?: string }>;
 }) {
   const { days } = await props.searchParams;
-  const range = Math.max(1, Math.min(180, Number(days) || 30));
+  const range = Math.max(1, Math.min(180, Number(days) || SEAT_REVIEW_DAYS));
   const fromDate = isoDateMinusDays(range);
   const toDate = isoDateMinusDays(0);
   const from = new Date(`${fromDate}T00:00:00Z`);

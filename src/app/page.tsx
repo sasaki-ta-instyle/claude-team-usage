@@ -5,7 +5,11 @@ import {
   eventsDataStart,
   rosterMemberSummary,
 } from "@/lib/cowork-queries";
-import { effectiveRangeDays, recommendSeat } from "@/lib/seat-recommendation";
+import {
+  SEAT_REVIEW_DAYS,
+  effectiveRangeDays,
+  recommendSeat,
+} from "@/lib/seat-recommendation";
 import {
   formatCost,
   formatTokens,
@@ -22,13 +26,16 @@ export default async function DashboardPage() {
   const from = new Date(`${fromDate}T00:00:00Z`);
   const to = new Date();
 
+  // コスト KPI は当月、seat 推奨と上位メンバーは直近 30 日（月初でも判定材料が揃うように）
+  const reviewFromDate = isoDateMinusDays(SEAT_REVIEW_DAYS);
+  const reviewFrom = new Date(`${reviewFromDate}T00:00:00Z`);
   const [overall, rosterRows, dataStart] = await Promise.all([
     combinedOverall({ from, to }),
-    rosterMemberSummary({ from, to }),
+    rosterMemberSummary({ from: reviewFrom, to }),
     eventsDataStart(),
   ]);
-  const rangeDays = effectiveRangeDays(from, to, dataStart);
-  // 上位表示は「当月に利用があった人」（ロスター外も含む）をコスト順で
+  const rangeDays = effectiveRangeDays(reviewFrom, to, dataStart);
+  // 上位表示は「直近 30 日に利用があった人」（ロスター外も含む）をコスト順で
   const members = rosterRows
     .filter((m) => m.totalCostCents > 0 || m.coworkPrompts + m.codePrompts > 0)
     .sort((a, b) => b.totalCostCents - a.totalCostCents);
@@ -39,7 +46,7 @@ export default async function DashboardPage() {
     api_direct_candidate: 0,
     unused: 0,
   };
-  // 推奨 seat の内訳はロスター（シート保有者）が母集団。当月イベント 0 の人は未使用に入る。
+  // 推奨 seat の内訳はロスター（シート保有者）が母集団。直近 30 日イベント 0 の人は未使用に入る。
   for (const m of rosterRows) {
     if (m.inRoster) recoCounts[recommendSeat(m, rangeDays)]++;
   }
@@ -50,7 +57,8 @@ export default async function DashboardPage() {
     <>
       <h1 className="page-title">概要</h1>
       <p className="page-subtitle">
-        期間: <strong>{fromDate}</strong> – <strong>{toDate}</strong>（当月）。
+        コスト: <strong>{fromDate}</strong> – <strong>{toDate}</strong>（当月）。
+        seat 推奨と利用メンバー上位: <strong>{reviewFromDate}</strong> – <strong>{toDate}</strong>（直近 {SEAT_REVIEW_DAYS} 日）。
         Cowork + Claude Code（OTel push）の合算。
       </p>
 
@@ -99,7 +107,7 @@ export default async function DashboardPage() {
 
       <section className="glass-panel">
         <div className="flex-row" style={{ marginBottom: 16 }}>
-          <h2 style={{ margin: 0 }}>当月の利用メンバー上位</h2>
+          <h2 style={{ margin: 0 }}>直近 30 日の利用メンバー上位</h2>
           <span className="spacer" />
           <Link className="btn" href="/members">
             すべて見る
