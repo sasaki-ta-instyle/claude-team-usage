@@ -1,7 +1,7 @@
 import { auth } from "@/lib/auth";
 import { PREVIEW } from "@/lib/preview";
 
-// 閲覧は誰でも可（URL を知っていれば見られる公開ダッシュボード）。
+// 閲覧は暗証番号（middleware の PIN ゲート）で可。
 // 書き込み（ロスター CSV 取り込み / tier 編集）だけ管理者ログインが必要。
 // stale JWT（旧 AUTH_SECRET 署名）でも落ちないよう、失敗は未ログイン扱い。
 export async function isAdminViewer(): Promise<boolean> {

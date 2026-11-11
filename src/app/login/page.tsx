@@ -29,7 +29,7 @@ export default async function LoginPage(props: {
       <div className="login-card glass-panel">
         <h1 className="login-title">Claude Team Usage</h1>
         <p className="login-sub">
-          閲覧はログイン不要です。メンバー CSV の取り込み・tier 編集を行う管理者のみ、共通パスワードでログインしてください。
+          管理者用ログインです（メンバー CSV の取り込み・tier 編集）。閲覧だけなら暗証番号で入れます。
         </p>
   
         {errorMsg ? <p className="login-error">{errorMsg}</p> : null}

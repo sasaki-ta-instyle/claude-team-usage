@@ -103,7 +103,12 @@ pm2 reload app-claude-team-usage --update-env
 
 instyle group が契約する **Claude Team プラン**の使用量を可視化し、Premium ($125/seat) / Standard ($25/seat) の配分判断を支える管理ダッシュボード。
 
-**閲覧は公開（ログイン不要、URL を知っていれば誰でも見られる）**。メンバー email と個人別コストが載るため、検索エンジンには載せない（layout の robots meta ＋ middleware で全レスポンスに `X-Robots-Tag: noindex, nofollow, noarchive`）。書き込み（ロスター CSV 取り込み / tier 編集）だけ管理者の共通パスワードログインが必要で、`isAdminViewer()`（`src/lib/viewer.ts`）で UI を出し分け、各 server action 側でも isAdmin を検査する。API（`/api/sync` / `/api/report` / `/api/roster`）は Bearer、`/api/otel` は Basic で個別に守る。
+**閲覧は暗証番号（PIN）で入れる**。`/unlock` で env `VIEWER_PIN`（数字 4〜8 桁）を入れると 30 日有効の cookie（`HMAC(AUTH_SECRET, PIN)`）が付き、middleware が通す。PIN を変えると全員の cookie が無効になる。総当たり対策として IP ごとに 10 分 5 回失敗でロック。`VIEWER_PIN` 未設定なら管理者以外は入れない（fail-closed）。メンバー email と個人別コストが載るため検索エンジンにも載せない（robots meta ＋全レスポンスに `X-Robots-Tag`）。書き込み（ロスター CSV 取り込み / tier 編集）だけ管理者の共通パスワードログインが必要で、`isAdminViewer()`（`src/lib/viewer.ts`）で UI を出し分け、各 server action 側でも isAdmin を検査する。管理者ログイン済みなら PIN なしで閲覧できる。API（`/api/sync` / `/api/report` / `/api/roster`）は Bearer、`/api/otel` は Basic で個別に守る。
+
+PIN の変更（値を画面に出さない）:
+```bash
+ssh conoha-deploy 'f=/var/www/_shared/apps/app-claude-team-usage.env; sed -i "s/^VIEWER_PIN=.*/VIEWER_PIN=<新しい数字>/" $f && cd /var/www/app/claude-team-usage/current && pm2 startOrReload ecosystem.config.cjs --update-env'
+```
 
 ### スタック
 
@@ -117,7 +122,8 @@ instyle group が契約する **Claude Team プラン**の使用量を可視化�
 
 | ルート | 内容 | データソース |
 |---|---|---|
-| `/login` | 管理者ログイン（共通パスワード）。閲覧には不要 | — |
+| `/unlock` | 閲覧用の暗証番号入力 | — |
+| `/login` | 管理者ログイン（共通パスワード）。閲覧だけなら不要 | — |
 | `/` | KPI 7 枚（コスト内訳 / アクティブ数 / トークン / Premium 推奨 / Standard 維持 / API 従量候補 / 未使用） | **OTel push 統合**（Cowork + Code）＋ `users` roster |
 | `/members?days=N` | ロスター全員＋利用実績のあるロスター外 email のテーブル（Cowork / Code / 合計 / 稼働日 / 最大日コスト / api_error / 現状 tier / 推奨 seat 4 値）。**合計コストを月額換算して判定**（≥ $100 = Premium / $10–$100 = Standard / < $10 = API 従量 / プロンプト 0 = 未使用）。副バッジで `制限到達`（api_error 観測）/ `高稼働`（≥ 15 日）を表示。上部にロスター CSV 取り込みフォーム（admin） | **OTel push 統合**＋稼働シグナル＋ロスター |
 | `/members/[email]` | 日次推移チャート、seat 種別の手動編集（次回 CSV 取り込みで上書き） | Anthropic Admin API（旧、保留中） |

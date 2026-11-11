@@ -43,7 +43,7 @@ export default async function RootLayout({
 }: {
   children: React.ReactNode;
 }) {
-  // 閲覧は公開。ヘッダ右側だけ管理者ログイン状態で出し分ける。
+  // 閲覧は暗証番号ゲート（middleware）。ヘッダ右側だけ管理者ログイン状態で出し分ける。
   const isAdmin = await isAdminViewer();
 
   return (
