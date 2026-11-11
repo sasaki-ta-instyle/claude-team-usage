@@ -75,7 +75,7 @@ export default async function DashboardPage() {
         <div className="card">
           <p className="kpi-label">Premium 推奨</p>
           <p className="kpi-value">{recoCounts.premium}</p>
-          <p className="kpi-sub">月 ≥ $100</p>
+          <p className="kpi-sub">勤務時間に上限到達 / 5h 上限付近が多い</p>
         </div>
       </section>
 
@@ -83,12 +83,12 @@ export default async function DashboardPage() {
         <div className="card">
           <p className="kpi-label">Standard 維持</p>
           <p className="kpi-value">{recoCounts.standard}</p>
-          <p className="kpi-sub">$10 – $100</p>
+          <p className="kpi-sub">上限に当たっていない</p>
         </div>
         <div className="card">
           <p className="kpi-label">API 従量候補</p>
           <p className="kpi-value">{recoCounts.api_direct_candidate}</p>
-          <p className="kpi-sub">月 &lt; $10（pay-as-you-go の方が安い）</p>
+          <p className="kpi-sub">月換算 &lt; $10（pay-as-you-go の方が安い）</p>
         </div>
         <div className="card">
           <p className="kpi-label">未使用</p>

@@ -4,11 +4,15 @@ import { useMemo, useState } from "react";
 
 import { formatTokens } from "@/lib/format";
 import {
+  DEFAULT_SEAT_POLICY,
   PREMIUM_MONTHLY_USD,
   STANDARD_MONTHLY_USD,
   SEAT_RECO_META,
-  recommendSeatForSimulator,
+  recommendReason,
+  recommendSeat,
   seatMonthlyUsd,
+  seatSignals,
+  type SeatPolicy,
   type SeatRecommendation,
 } from "@/lib/seat-recommendation";
 
@@ -22,15 +26,16 @@ type Member = {
   codeCostCents: number;
   coworkPrompts: number;
   codePrompts: number;
+  rateLimitDays: number;
+  workPeaksCents: number[];
 };
 
-const PRESETS: Array<{ value: number; label: string }> = [
-  { value: 25, label: "Standard 月額" },
-  { value: 50, label: "保守的" },
-  { value: 100, label: "損益分岐（既定）" },
-  { value: 125, label: "Premium 月額" },
+// 判定基準のプリセット。「標準」が既定（/members と同じ）。
+const PRESETS: Array<{ key: string; label: string; policy: SeatPolicy }> = [
+  { key: "strict", label: "厳しめ（1 日でも当たれば昇格）", policy: { limitHitDays: 1, peakCapCents: 3200, peakDays: 2 } },
+  { key: "standard", label: "標準", policy: DEFAULT_SEAT_POLICY },
+  { key: "evidence", label: "実績のみ（制限到達だけ）", policy: { limitHitDays: 2, peakCapCents: 4000, peakDays: Infinity } },
 ];
-const DEFAULT_THRESHOLD = 100;
 
 function fmtUsd(v: number) {
   return v.toLocaleString("en-US", {
@@ -49,7 +54,7 @@ export function Simulator({
   rangeDays: number;
   jpyPerUsd: number;
 }) {
-  const [threshold, setThreshold] = useState<number>(DEFAULT_THRESHOLD);
+  const [policy, setPolicy] = useState<SeatPolicy>(DEFAULT_SEAT_POLICY);
   const [treatApiDirectAsZero, setTreatApiDirectAsZero] = useState<boolean>(true);
 
   const fmtJpy = (usd: number) =>
@@ -65,20 +70,18 @@ export function Simulator({
   };
 
   const computed = useMemo(() => {
-    const thresholdCents = Math.round(threshold * 100);
     const rows = members.map((m) => {
-      const reco = recommendSeatForSimulator(
-        {
-          coworkCostCents: m.coworkCostCents,
-          codeCostCents: m.codeCostCents,
-          totalCostCents: m.costCents,
-          coworkPrompts: m.coworkPrompts,
-          codePrompts: m.codePrompts,
-        },
-        rangeDays,
-        thresholdCents,
-        { treatApiDirectAsZero }
-      );
+      const input = {
+        totalCostCents: m.costCents,
+        coworkPrompts: m.coworkPrompts,
+        codePrompts: m.codePrompts,
+        rateLimitDays: m.rateLimitDays,
+        workPeaksCents: m.workPeaksCents,
+      };
+      let reco = recommendSeat(input, rangeDays, policy);
+      // API 従量候補を集計外にしない場合は Standard として数える
+      if (!treatApiDirectAsZero && reco === "api_direct_candidate") reco = "standard";
+      const reason = recommendReason(reco, seatSignals(input, rangeDays, policy), policy);
       const planCost = seatMonthlyUsd(reco);
       const currentCost =
         m.seatType === "premium"
@@ -86,13 +89,7 @@ export function Simulator({
           : m.seatType === "standard"
             ? STANDARD_MONTHLY_USD
             : 0;
-      return {
-        ...m,
-        reco,
-        planCost,
-        currentCost,
-        deltaUsd: planCost - currentCost,
-      };
+      return { ...m, reco, reason, planCost, currentCost, deltaUsd: planCost - currentCost };
     });
 
     const counts: Record<SeatRecommendation, number> = {
@@ -108,7 +105,6 @@ export function Simulator({
 
     return {
       rows: rows.sort((a, b) => b.costCents - a.costCents),
-      counts,
       premiumCount: counts.premium,
       standardCount: counts.standard,
       apiDirectCount: counts.api_direct_candidate,
@@ -117,32 +113,44 @@ export function Simulator({
       totalCurrentCost,
       deltaUsd: totalPlanCost - totalCurrentCost,
     };
-  }, [members, rangeDays, threshold, treatApiDirectAsZero]);
+  }, [members, rangeDays, policy, treatApiDirectAsZero]);
+
+  const num = (v: string, fallback: number) => {
+    const n = Number(v);
+    return Number.isFinite(n) && n >= 0 ? n : fallback;
+  };
 
   return (
     <>
       <section className="glass-panel">
-        <h2 style={{ marginTop: 0 }}>閾値を設定する</h2>
+        <h2 style={{ marginTop: 0 }}>判定基準を設定する</h2>
         <p className="muted" style={{ fontSize: 12, marginTop: 0 }}>
-          月換算コスト（Cowork + Code 合算、当月途中は日割りで月額に換算）がこの値以上のメンバーを Premium 推奨と判定します。
-          損益分岐は <strong>$100</strong>（差額 $100/seat/月の回収ライン）。
+          Premium と Standard の差は 5 時間ごとの利用上限。勤務時間（平日 10–18 時）に Standard の上限が
+          仕事を止めている人だけ Premium にする。どちらかの条件（月あたり）を満たすと Premium 推奨。
         </p>
 
-        <div
-          className="flex-row"
-          style={{ marginTop: 18, marginBottom: 22, alignItems: "flex-end" }}
-        >
-          <div className="threshold-readout">
-            {fmtUsd(threshold)}
-            <small>現在の閾値</small>
-          </div>
+        <div className="flex-row" style={{ marginBottom: 14, flexWrap: "wrap" }}>
+          {PRESETS.map((p) => {
+            const active =
+              p.policy.limitHitDays === policy.limitHitDays &&
+              p.policy.peakCapCents === policy.peakCapCents &&
+              p.policy.peakDays === policy.peakDays;
+            return (
+              <button
+                key={p.key}
+                type="button"
+                className={`btn${active ? " btn--quiet-active" : ""}`}
+                onClick={() => setPolicy(p.policy)}
+              >
+                {p.label}
+              </button>
+            );
+          })}
           <span className="spacer" />
           <div style={{ textAlign: "right", fontSize: 12, color: "var(--color-text-muted)" }}>
             <div>
-              現状: <strong>{fmtUsd(computed.totalCurrentCost)}</strong>
-            </div>
-            <div>
-              判定後: <strong>{fmtUsd(computed.totalPlanCost)}</strong>
+              現状: <strong>{fmtUsd(computed.totalCurrentCost)}</strong> → 判定後:{" "}
+              <strong>{fmtUsd(computed.totalPlanCost)}</strong>
             </div>
             <div
               style={{
@@ -156,50 +164,54 @@ export function Simulator({
               }}
             >
               差分: {computed.deltaUsd >= 0 ? "+" : ""}
-              {fmtUsd(computed.deltaUsd)}
+              {fmtUsd(computed.deltaUsd)} / 月
             </div>
           </div>
         </div>
 
-        <div className="flex-row" style={{ marginBottom: 14, flexWrap: "wrap" }}>
-          {PRESETS.map((p) => (
-            <button
-              key={p.value}
-              type="button"
-              className={`btn${threshold === p.value ? " btn--quiet-active" : ""}`}
-              onClick={() => setThreshold(p.value)}
-              title={p.label}
-            >
-              ${p.value}
-              <span className="muted" style={{ fontSize: 10, marginLeft: 6 }}>
-                {p.label}
-              </span>
-            </button>
-          ))}
-        </div>
-        <div className="flex-row">
-          <label className="muted" style={{ fontSize: 12 }}>
-            カスタム USD
+        <div className="flex-row" style={{ flexWrap: "wrap", gap: 16, fontSize: 13 }}>
+          <label className="flex-row">
+            制限到達
+            <input
+              className="input"
+              type="number"
+              min={1}
+              step={1}
+              value={policy.limitHitDays}
+              onChange={(e) => setPolicy({ ...policy, limitHitDays: num(e.target.value, policy.limitHitDays) })}
+              style={{ width: 72 }}
+            />
+            日以上
           </label>
-          <input
-            className="input"
-            type="number"
-            min={0}
-            max={500}
-            step={5}
-            value={threshold}
-            onChange={(e) => setThreshold(Number(e.target.value) || 0)}
-            style={{ width: 100 }}
-          />
-          <input
-            type="range"
-            min={0}
-            max={300}
-            step={5}
-            value={threshold}
-            onChange={(e) => setThreshold(Number(e.target.value))}
-            style={{ flex: 1 }}
-          />
+          <span className="muted">または</span>
+          <label className="flex-row">
+            勤務時間に直前 5 時間で $
+            <input
+              className="input"
+              type="number"
+              min={0}
+              step={5}
+              value={policy.peakCapCents / 100}
+              onChange={(e) =>
+                setPolicy({ ...policy, peakCapCents: Math.round(num(e.target.value, policy.peakCapCents / 100) * 100) })
+              }
+              style={{ width: 80 }}
+            />
+            以上の日が
+            <input
+              className="input"
+              type="number"
+              min={1}
+              step={1}
+              value={Number.isFinite(policy.peakDays) ? policy.peakDays : ""}
+              placeholder="使わない"
+              onChange={(e) =>
+                setPolicy({ ...policy, peakDays: e.target.value === "" ? Infinity : num(e.target.value, policy.peakDays) })
+              }
+              style={{ width: 90 }}
+            />
+            日以上
+          </label>
         </div>
 
         <div
@@ -207,9 +219,6 @@ export function Simulator({
             marginTop: 16,
             paddingTop: 16,
             borderTop: "1px solid rgba(53, 54, 45, 0.08)",
-            display: "flex",
-            flexDirection: "column",
-            gap: 8,
             fontSize: 13,
           }}
         >
@@ -220,7 +229,7 @@ export function Simulator({
               onChange={(e) => setTreatApiDirectAsZero(e.target.checked)}
             />
             <span>
-              <strong>API 従量候補（月 &lt; $10）をシート集計から外す</strong>
+              <strong>API 従量候補（月換算 &lt; $10）をシート集計から外す</strong>
               <span className="muted" style={{ marginLeft: 8, fontSize: 11 }}>
                 Workspace API キーで従量運用に切り出し、$0 で計算
               </span>
@@ -289,6 +298,9 @@ export function Simulator({
                     <td className="num"><strong>{fmtCost(r.costCents)}</strong></td>
                     <td>
                       <span className={`badge ${meta.badge}`}>{meta.label}</span>
+                      <div className="muted" style={{ fontSize: 11, marginTop: 2 }}>
+                        {r.reason}
+                      </div>
                     </td>
                     <td
                       className="num"

@@ -4,6 +4,7 @@ import { db, schema } from "@/db/client";
 import { HIDDEN_EMAILS_LOWER } from "@/lib/hidden-emails";
 import { PREVIEW } from "@/lib/preview";
 import { usersRoster } from "@/lib/queries";
+import { WORK_HOURS_JST } from "@/lib/seat-recommendation";
 import {
   COWORK_MOCK_MEMBERS,
   mockCoworkOverall,
@@ -290,19 +291,21 @@ export async function combinedOverall(opts: { from?: Date; to?: Date }) {
 // - ロスター在籍でイベント 0 件の人も 0 値で出す（→ 推奨は「未使用」）
 // - ロスター外だが使用実績のある email も消さずに inRoster=false で残す
 
-export type RosterMemberRow = CombinedMemberRow & {
-  displayName: string | null;
-  seatType: "premium" | "standard" | null;
-  inRoster: boolean;
-};
+export type RosterMemberRow = CombinedMemberRow &
+  MemberSeatSignals & {
+    displayName: string | null;
+    seatType: "premium" | "standard" | null;
+    inRoster: boolean;
+  };
 
 export async function rosterMemberSummary(opts: {
   from?: Date;
   to?: Date;
 }): Promise<RosterMemberRow[]> {
-  const [members, roster] = await Promise.all([
+  const [members, roster, signals] = await Promise.all([
     combinedMemberSummary(opts),
     usersRoster(),
+    memberSeatSignals(opts),
   ]);
   const rosterByEmail = new Map(roster.map((u) => [u.email.toLowerCase(), u]));
   const seen = new Set<string>();
@@ -312,6 +315,7 @@ export async function rosterMemberSummary(opts: {
     const u = rosterByEmail.get(key);
     return {
       ...m,
+      ...(signals.get(key) ?? EMPTY_SIGNALS),
       displayName: u?.displayName ?? null,
       seatType: toSeat(u?.seatType ?? null),
       inRoster: Boolean(u),
@@ -331,6 +335,7 @@ export async function rosterMemberSummary(opts: {
       totalTokens: 0,
       firstSeen: null,
       lastSeen: null,
+      ...EMPTY_SIGNALS,
       displayName: u.displayName,
       seatType: toSeat(u.seatType),
       inRoster: true,
@@ -358,73 +363,105 @@ export async function eventsDataStart(): Promise<Date | null> {
   return v ? new Date(v) : null;
 }
 
-// ─── 日次稼働シグナル ─────────────────────────────────────────
-// rate limit reset（5 時間 rolling）は per-user カラムが取れないので、
-// 「日次のアクティビティ密度」と「api_error 回数」で制限到達を間接的に検知する。
+// ─── 稼働・上限シグナル（seat 推奨の判定材料） ─────────────────────
+// - activeDays / maxDayCostCents: 日次（JST）の稼働日数と最大日コスト
+// - rateLimitDays: 制限到達（api_error かつ HTTP 429）があった JST 日数。
+//   OAuth 切れ・バージョン不一致・通信断などの api_error は数えない
+// - workPeaksCents: 勤務時間（平日 10–18 時 JST）の各日について、
+//   「その時点の直前 5 時間の利用額」の最大値（Standard / Premium の上限は 5h ローリング窓）
 
-export type MemberActivitySignals = {
+export type MemberSeatSignals = {
   activeDays: number;
   maxDayCostCents: number;
-  apiErrorCount: number;
+  rateLimitDays: number;
+  workPeaksCents: number[];
 };
 
-export async function memberActivitySignals(opts: {
+const EMPTY_SIGNALS: MemberSeatSignals = {
+  activeDays: 0,
+  maxDayCostCents: 0,
+  rateLimitDays: 0,
+  workPeaksCents: [],
+};
+
+export async function memberSeatSignals(opts: {
   from?: Date;
   to?: Date;
-}): Promise<Map<string, MemberActivitySignals>> {
-  const out = new Map<string, MemberActivitySignals>();
+}): Promise<Map<string, MemberSeatSignals>> {
+  const out = new Map<string, MemberSeatSignals>();
   if (PREVIEW) {
-    // モック: 既存 cowork mock の promptCount からそれっぽい値を生成
     for (const m of COWORK_MOCK_MEMBERS) {
-      const promptCount = m.promptCount;
-      const activeDays = Math.min(30, Math.max(1, Math.round(promptCount / 8)));
-      const maxDayCostCents = Math.round(m.totalCostCents / Math.max(1, activeDays) * 1.6);
+      const activeDays = Math.min(30, Math.max(1, Math.round(m.promptCount / 8)));
+      const perDay = m.totalCostCents / Math.max(1, activeDays);
       out.set(m.email.toLowerCase(), {
         activeDays,
-        maxDayCostCents,
-        apiErrorCount: m.apiErrorCount,
+        maxDayCostCents: Math.round(perDay * 1.6),
+        rateLimitDays: m.apiErrorCount >= 2 ? m.apiErrorCount : 0,
+        workPeaksCents: Array.from({ length: Math.min(activeDays, 20) }, (_, i) =>
+          Math.round(perDay * (0.4 + ((i * 37) % 10) / 10))
+        ),
       });
     }
     return out;
   }
   const { fromD, toD } = rangeBounds(opts.from, opts.to);
-  // 2 段集計: per-day 合計 → user で MAX / COUNT / SUM
-  const perDay = db.$with("per_day").as(
-    db
-      .select({
-        email: schema.coworkEvents.userEmail,
-        day: sql<string>`date(${schema.coworkEvents.occurredAt})`.as("day"),
-        dayCents: sql<number>`coalesce(sum(${schema.coworkEvents.costUsdCents}), 0)`.as("day_cents"),
-        errors: sql<number>`coalesce(sum(case when ${schema.coworkEvents.eventName} = 'api_error' then 1 else 0 end), 0)`.as("errors"),
-      })
-      .from(schema.coworkEvents)
-      .where(
-        and(
-          gte(schema.coworkEvents.occurredAt, fromD),
-          lte(schema.coworkEvents.occurredAt, toD),
-          sql`${schema.coworkEvents.userEmail} is not null`,
-          hiddenEmailFilter,
-          SVC_ANY
-        )
-      )
-      .groupBy(schema.coworkEvents.userEmail, sql`date(${schema.coworkEvents.occurredAt})`)
+  const hidden = sql.join(
+    HIDDEN_EMAILS_LOWER.map((e) => sql`${e}`),
+    sql`, `
   );
-  const rows = await db
-    .with(perDay)
-    .select({
-      email: perDay.email,
-      activeDays: sql<number>`count(*)`,
-      maxDayCents: sql<number>`coalesce(max(${perDay.dayCents}), 0)`,
-      errorTotal: sql<number>`coalesce(sum(${perDay.errors}), 0)`,
-    })
-    .from(perDay)
-    .groupBy(perDay.email);
-  for (const r of rows) {
-    if (!r.email) continue;
-    out.set(r.email.toLowerCase(), {
-      activeDays: Number(r.activeDays ?? 0),
-      maxDayCostCents: Number(r.maxDayCents ?? 0),
-      apiErrorCount: Number(r.errorTotal ?? 0),
+  const services = sql`('cowork', 'claude-code', 'claude_code', 'claude-code-desktop')`;
+  const { startHour, endHour } = WORK_HOURS_JST;
+
+  const res = await db.execute(sql`
+    with ev as (
+      select lower(user_email) as u,
+             occurred_at as t,
+             (occurred_at at time zone 'Asia/Tokyo') as jt,
+             coalesce(cost_usd_cents, 0) as c,
+             event_name,
+             status_code
+      from cowork_events
+      where occurred_at >= ${fromD} and occurred_at <= ${toD}
+        and user_email is not null
+        and lower(user_email) not in (${hidden})
+        and coalesce(service_name, '') in ${services}
+    ),
+    daily as (
+      select u, jt::date as d, sum(c) as day_cents from ev group by 1, 2
+    ),
+    win as (
+      select u, jt,
+             sum(c) over (partition by u order by t
+                          range between interval '5 hours' preceding and current row) as w5
+      from ev where c > 0
+    ),
+    work_peak as (
+      select u, jt::date as d, max(w5) as peak from win
+      where extract(isodow from jt) <= 5
+        and extract(hour from jt) >= ${startHour} and extract(hour from jt) < ${endHour}
+      group by 1, 2
+    ),
+    hits as (
+      select u, count(distinct jt::date) as hit_days from ev
+      where event_name = 'api_error' and status_code = 429
+      group by 1
+    )
+    select d.u as email,
+           count(*)::int as active_days,
+           coalesce(max(d.day_cents), 0)::bigint as max_day_cents,
+           coalesce((select hit_days from hits h where h.u = d.u), 0)::int as rate_limit_days,
+           coalesce((select array_agg(peak::bigint order by wp.d) from work_peak wp where wp.u = d.u), '{}') as work_peaks
+    from daily d
+    group by d.u
+  `);
+  for (const r of res.rows as Array<Record<string, unknown>>) {
+    const email = String(r.email ?? "");
+    if (!email) continue;
+    out.set(email, {
+      activeDays: Number(r.active_days ?? 0),
+      maxDayCostCents: Number(r.max_day_cents ?? 0),
+      rateLimitDays: Number(r.rate_limit_days ?? 0),
+      workPeaksCents: ((r.work_peaks as Array<string | number> | null) ?? []).map(Number),
     });
   }
   return out;

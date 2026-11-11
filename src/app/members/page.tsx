@@ -1,17 +1,16 @@
 import Link from "next/link";
 
-import {
-  eventsDataStart,
-  memberActivitySignals,
-  rosterMemberSummary,
-} from "@/lib/cowork-queries";
+import { eventsDataStart, rosterMemberSummary } from "@/lib/cowork-queries";
 import { rosterLastSyncedAt } from "@/lib/queries";
 import { isAdminViewer } from "@/lib/viewer";
 import {
+  DEFAULT_SEAT_POLICY,
+  WORK_HOURS_JST,
   effectiveRangeDays,
-  monthlyCostCents,
+  recommendReason,
   recommendSeat,
   SEAT_RECO_META,
+  seatSignals,
 } from "@/lib/seat-recommendation";
 import { RosterUpload } from "./roster-upload";
 import {
@@ -45,6 +44,7 @@ const PRESETS = [
 ];
 
 const HIGH_ACTIVITY_DAYS = 15;
+const POLICY = DEFAULT_SEAT_POLICY;
 
 export default async function MembersPage(props: {
   searchParams: Promise<{ days?: string }>;
@@ -55,9 +55,8 @@ export default async function MembersPage(props: {
   const toDate = isoDateMinusDays(0);
   const from = new Date(`${fromDate}T00:00:00Z`);
   const to = new Date();
-  const [members, signals, dataStart, lastSynced, isAdmin] = await Promise.all([
+  const [members, dataStart, lastSynced, isAdmin] = await Promise.all([
     rosterMemberSummary({ from, to }),
-    memberActivitySignals({ from, to }),
     eventsDataStart(),
     rosterLastSyncedAt(),
     isAdminViewer(),
@@ -77,10 +76,14 @@ export default async function MembersPage(props: {
           </>
         ) : null}
         。ロスター {rosterCount} 名。
-        Cowork + Code（OTel push）の合算コストを<strong>月額に換算</strong>して判定。
-        <strong>月 ≥ $100 = Premium 推奨</strong> / <strong>$10 – $100 = Standard 維持</strong> /
-        <strong>月 &lt; $10 = API 従量候補</strong> / プロンプト 0 = 未使用。
-        <strong>制限到達回数</strong>列（api_error 観測数）で rate limit cap への当たり方を判断、
+        推奨 seat は「勤務時間（平日 {WORK_HOURS_JST.startHour}–{WORK_HOURS_JST.endHour} 時）に Standard の上限が仕事を止めているか」で判定。
+        <strong>
+          月に 制限到達 {POLICY.limitHitDays} 日以上、または 勤務時間内に直前 5 時間の利用が{" "}
+          {formatUsd(POLICY.peakCapCents)} 以上の日が {POLICY.peakDays} 日以上 = Premium 推奨
+        </strong>{" "}
+        / それ以外 = Standard 維持（月コストが大きくても上限に当たらなければ Standard で足りる）/
+        <strong>月換算 &lt; $10 = API 従量候補</strong> / プロンプト 0 = 未使用。
+        制限到達は HTTP 429（レート制限）だけを数える（OAuth 切れ等のエラーは除外）。
         副バッジで <strong>高稼働</strong>（≥ {HIGH_ACTIVITY_DAYS} 日アクティブ）を表示。
         <strong>現状 tier</strong> と推奨がズレている場合は「⬇ 過剰投資」（Premium 割当だが推奨は下位）／
         「⬆ 過小投資」（Standard 割当だが推奨 Premium）バッジで警告する。
@@ -121,7 +124,8 @@ export default async function MembersPage(props: {
                   <th className="num">合計コスト</th>
                   <th className="num">稼働日</th>
                   <th className="num">最大日コスト</th>
-                  <th className="num num--narrow">制限到達回数</th>
+                  <th className="num num--narrow">制限到達日数</th>
+                  <th className="num">勤務時間 5h ピーク</th>
                   <th>現状 tier</th>
                   <th>推奨 seat</th>
                 </tr>
@@ -129,14 +133,12 @@ export default async function MembersPage(props: {
               <tbody>
                 {members.map((m) => {
                   const reco = recommendSeat(m, rangeDays);
-                  const monthly = monthlyCostCents(m.totalCostCents, rangeDays);
+                  const sig = seatSignals(m, rangeDays);
                   const meta = SEAT_RECO_META[reco];
                   const isApiDirect = reco === "api_direct_candidate";
-                  const sig = signals.get(m.email.toLowerCase());
-                  const activeDays = sig?.activeDays ?? 0;
-                  const maxDayCostCents = sig?.maxDayCostCents ?? 0;
-                  const apiErrorCount = sig?.apiErrorCount ?? 0;
-                  const isCapped = apiErrorCount > 0;
+                  const activeDays = m.activeDays;
+                  const isCapped = m.rateLimitDays > 0;
+                  const peakDays = m.workPeaksCents.filter((c) => c >= POLICY.peakCapCents).length;
                   const isHighActivity = activeDays >= HIGH_ACTIVITY_DAYS;
                   const currentSeat = m.seatType;
                   const overInvest =
@@ -163,12 +165,22 @@ export default async function MembersPage(props: {
                         <CostStack cents={m.totalCostCents} emphasize />
                       </td>
                       <td className="num">{activeDays}</td>
-                      <td className="num"><CostStack cents={maxDayCostCents} /></td>
+                      <td className="num"><CostStack cents={m.maxDayCostCents} /></td>
                       <td
                         className="num num--narrow"
                         style={isCapped ? { color: "var(--color-warning)", fontWeight: 600 } : undefined}
                       >
-                        {apiErrorCount}
+                        {m.rateLimitDays}
+                      </td>
+                      <td className="num">
+                        {formatUsd(sig.maxPeakCents)}
+                        <div
+                          className="muted"
+                          style={{ fontSize: 11, marginTop: 2 }}
+                          title={`勤務時間内に直前 5 時間の利用が ${formatUsd(POLICY.peakCapCents)} 以上になった日数`}
+                        >
+                          {formatUsd(POLICY.peakCapCents)}+ {peakDays} 日
+                        </div>
                       </td>
                       <td>
                         {!m.inRoster ? (
@@ -215,9 +227,7 @@ export default async function MembersPage(props: {
                       <td>
                         <span className={`badge ${meta.badge}`}>{meta.label}</span>
                         <div className="muted" style={{ fontSize: 11, marginTop: 2 }}>
-                          {reco === "unused"
-                            ? meta.helper
-                            : `月換算 ${formatUsd(monthly)}（${meta.helper}）`}
+                          {recommendReason(reco, sig)}
                         </div>
                         {isHighActivity ? (
                           <div style={{ marginTop: 4, display: "flex", gap: 4, flexWrap: "wrap" }}>

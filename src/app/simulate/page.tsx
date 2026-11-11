@@ -30,6 +30,8 @@ export default async function SimulatePage() {
       codeCostCents: m.codeCostCents,
       coworkPrompts: m.coworkPrompts,
       codePrompts: m.codePrompts,
+      rateLimitDays: m.rateLimitDays,
+      workPeaksCents: m.workPeaksCents,
     }));
 
   return (
@@ -37,7 +39,7 @@ export default async function SimulatePage() {
       <h1 className="page-title">配分シミュレーション</h1>
       <p className="page-subtitle">
         当月の Cowork + Claude Code 使用量から Premium ($125) / Standard ($25) の候補配分を試算。
-        期間: <strong>{fromDate}</strong> – <strong>{toDate}</strong>（{rangeDays.toFixed(1)} 日分を月額に換算して判定）。
+        期間: <strong>{fromDate}</strong> – <strong>{toDate}</strong>（{rangeDays.toFixed(1)} 日分。当月途中は日数を引き伸ばさず、そのまま月の基準と比べる）。
       </p>
       <Simulator members={members} rangeDays={rangeDays} jpyPerUsd={jpyPerUsd()} />
     </>

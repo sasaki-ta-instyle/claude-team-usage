@@ -125,12 +125,12 @@ ssh conoha-deploy 'f=/var/www/_shared/apps/app-claude-team-usage.env; sed -i "s/
 | `/unlock` | 閲覧用の暗証番号入力 | — |
 | `/login` | 管理者ログイン（共通パスワード）。閲覧だけなら不要 | — |
 | `/` | KPI 7 枚（コスト内訳 / アクティブ数 / トークン / Premium 推奨 / Standard 維持 / API 従量候補 / 未使用） | **OTel push 統合**（Cowork + Code）＋ `users` roster |
-| `/members?days=N` | ロスター全員＋利用実績のあるロスター外 email のテーブル（Cowork / Code / 合計 / 稼働日 / 最大日コスト / api_error / 現状 tier / 推奨 seat 4 値）。**合計コストを月額換算して判定**（≥ $100 = Premium / $10–$100 = Standard / < $10 = API 従量 / プロンプト 0 = 未使用）。副バッジで `制限到達`（api_error 観測）/ `高稼働`（≥ 15 日）を表示。上部にロスター CSV 取り込みフォーム（admin） | **OTel push 統合**＋稼働シグナル＋ロスター |
+| `/members?days=N` | ロスター全員＋利用実績のあるロスター外 email のテーブル（Cowork / Code / 合計 / 稼働日 / 最大日コスト / 制限到達日数 / 勤務時間 5h ピーク / 現状 tier / 推奨 seat 4 値）。推奨は「推奨 seat の判定基準」節。副バッジで `高稼働`（≥ 15 日）を表示。上部にロスター CSV 取り込みフォーム（admin） | **OTel push 統合**＋上限シグナル＋ロスター |
 | `/members/[email]` | 日次推移チャート、seat 種別の手動編集（次回 CSV 取り込みで上書き） | Anthropic Admin API（旧、保留中） |
 | `/cowork?days=N` | Cowork 単体の利用集計 | OTel push（service.name=cowork） |
 | `/code-otel?days=N` | Claude Code CLI 単体の利用集計 | OTel push（service.name=claude-code） |
 | `/api-messages?days=N` | コンソール API：実課金額（プロジェクト=Workspace 別 / 日次推移 / モデル別 / コスト種別）＋ トークン明細 | Anthropic Admin API（Cost Report + Messages） |
-| `/simulate` | Premium / Standard 配分シミュレーション（**既定閾値 $100 = 損益分岐**、月額換算で判定、API 従量候補 → 集計外 トグル付き） | **OTel push 統合**＋ロスター |
+| `/simulate` | Premium / Standard 配分シミュレーション（判定基準のプリセット 厳しめ / 標準 / 実績のみ と各値の手入力、API 従量候補 → 集計外 トグル付き） | **OTel push 統合**＋ロスター |
 | `/sync-log` | 直近 50 件の Admin API 取り込み履歴 | Anthropic Admin API |
 | `/api/sync?source=code|messages|cost|workspaces|users|all` | Bearer SYNC_TOKEN 必須の取り込みエンドポイント | — |
 | `POST /api/roster` | Bearer SYNC_TOKEN 必須。本文にロスター CSV（text/csv）。`/members` のフォームと同じ処理 | claude.ai 管理画面のメンバー CSV |
@@ -152,9 +152,22 @@ ssh conoha-deploy 'f=/var/www/_shared/apps/app-claude-team-usage.env; sed -i "s/
 - 集計の母集団: `rosterMemberSummary`（`src/lib/cowork-queries.ts`）が OTel 集計にロスターを外側結合する。`/`・`/members`・`/simulate`・月次レポートはすべてこれを使う。非表示 email（`src/lib/hidden-emails.ts`）はロスターからも除外
 - **運用**: メンバー増減・tier 変更のたび（最低でも月初）に CSV を書き出して取り込む
 
-### 推奨 seat の月額換算
+### 推奨 seat の判定基準
 
-閾値（$100 / $10）は月額。集計期間の合計コストを「実効日数」で割り、平均月長（365.25/12 日）を掛けて比較する（`effectiveRangeDays` / `monthlyCostCents`、`src/lib/seat-recommendation.ts`）。実効日数は期間開始と生イベントの最古時刻（月次運用で古い raw は削除される）の遅い方から数える。当月途中の `/`・`/simulate` は日割りの月額ペース。
+Premium と Standard の差は **5 時間ローリング窓の利用上限**。勤務は平日 10–18 時なので、月のコスト総額ではなく「勤務時間に Standard の上限が仕事を止めているか」で判定する（`src/lib/seat-recommendation.ts`、既定値 `DEFAULT_SEAT_POLICY`）。
+
+| 判定 | 条件（月あたり） |
+|---|---|
+| Premium 推奨 | 制限到達 **2 日以上**、または 勤務時間内に「直前 5 時間の利用額」が **$40 以上**の日が **4 日以上** |
+| API 従量候補 | 月換算コスト < $10 |
+| 未使用 | コスト 0 かつプロンプト 0 |
+| Standard 維持 | それ以外（月コストが大きくても上限に当たっていなければ Standard で足りる） |
+
+- **制限到達** = `api_error` かつ HTTP 429 の JST 日数（`memberSeatSignals`、`src/lib/cowork-queries.ts`）。OAuth 切れ・バージョン不一致・通信断などの api_error は数えない。時間帯は問わない
+- **5h ピーク** = 勤務時間（平日 10:00–17:59 JST、祝日は未考慮）の各日について、その時点の直前 5 時間の利用額（API 換算コスト）の最大値。$40 は Standard が実際に 429 になった直前 5 時間の利用額（約 $30–48）から置いた目安
+- **月あたり換算**: 期間が 1 ヶ月（365.25/12 日）より長いときは日数を月平均に縮める。短い期間（7 日・当月途中）は引き伸ばさない（数日分の 1 回を月 4 回扱いにしない）
+- **月換算コスト**（API 従量候補の判定と表示用）: 合計コスト ÷ 実効日数 × 平均月長。実効日数は期間開始と生イベントの最古時刻（月次運用で古い raw は削除される）の遅い方から数える（`effectiveRangeDays`）
+- 基準値の妥当性は `/simulate` でプリセット（厳しめ / 標準 / 実績のみ）や手入力で比べられる。既定値を変えるときは `DEFAULT_SEAT_POLICY` を 1 か所直す
 
 ### OTel イベント受信（重要）
 
