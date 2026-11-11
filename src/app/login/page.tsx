@@ -25,54 +25,56 @@ export default async function LoginPage(props: {
   const errorMsg = error ? (ERRORS[error] ?? ERRORS.Configuration) : null;
 
   return (
-    <div className="login-card glass-panel">
-      <h1 className="login-title">Claude Team Usage</h1>
-      <p className="login-sub">
-        instyle group 管理者用ダッシュボード。共通パスワードでログインしてください。
-      </p>
-
-      {errorMsg ? <p className="login-error">{errorMsg}</p> : null}
-
-      <form
-        action={async (formData: FormData) => {
-          "use server";
-          const password = String(formData.get("password") ?? "");
-          if (!password) return;
-
-          // basePath を含めた絶対 path にする（Auth.js v5 は redirectTo の値を
-          // そのまま使うため、"/" だとサブドメイン直下に飛んでしまう）。
-          const BASE = "/claude-team-usage";
-          const dest = from ? `${BASE}${from.startsWith("/") ? from : `/${from}`}` : `${BASE}/`;
-
-          try {
-            await signIn("credentials", {
-              password,
-              redirectTo: dest,
-            });
-          } catch (err) {
-            if (err instanceof AuthError) {
-              redirect(`/login?error=${err.type}`);
+    <div className="login-wrap">
+      <div className="login-card glass-panel">
+        <h1 className="login-title">Claude Team Usage</h1>
+        <p className="login-sub">
+          閲覧はログイン不要です。メンバー CSV の取り込み・tier 編集を行う管理者のみ、共通パスワードでログインしてください。
+        </p>
+  
+        {errorMsg ? <p className="login-error">{errorMsg}</p> : null}
+  
+        <form
+          action={async (formData: FormData) => {
+            "use server";
+            const password = String(formData.get("password") ?? "");
+            if (!password) return;
+  
+            // basePath を含めた絶対 path にする（Auth.js v5 は redirectTo の値を
+            // そのまま使うため、"/" だとサブドメイン直下に飛んでしまう）。
+            const BASE = "/claude-team-usage";
+            const dest = from ? `${BASE}${from.startsWith("/") ? from : `/${from}`}` : `${BASE}/`;
+  
+            try {
+              await signIn("credentials", {
+                password,
+                redirectTo: dest,
+              });
+            } catch (err) {
+              if (err instanceof AuthError) {
+                redirect(`/login?error=${err.type}`);
+              }
+              throw err;
             }
-            throw err;
-          }
-        }}
-      >
-        <div className="field">
-          <label htmlFor="password">パスワード</label>
-          <input
-            className="input"
-            id="password"
-            name="password"
-            type="password"
-            required
-            autoComplete="current-password"
-            autoFocus
-          />
-        </div>
-        <button className="btn btn--primary" type="submit" style={{ width: "100%" }}>
-          ログイン
-        </button>
-      </form>
+          }}
+        >
+          <div className="field">
+            <label htmlFor="password">パスワード</label>
+            <input
+              className="input"
+              id="password"
+              name="password"
+              type="password"
+              required
+              autoComplete="current-password"
+              autoFocus
+            />
+          </div>
+          <button className="btn btn--primary" type="submit" style={{ width: "100%" }}>
+            ログイン
+          </button>
+        </form>
+      </div>
     </div>
   );
 }

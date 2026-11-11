@@ -1,8 +1,5 @@
 import Link from "next/link";
-import { redirect } from "next/navigation";
 
-import { auth } from "@/lib/auth";
-import { PREVIEW } from "@/lib/preview";
 import {
   combinedOverall,
   eventsDataStart,
@@ -19,10 +16,6 @@ import {
 export const dynamic = "force-dynamic";
 
 export default async function DashboardPage() {
-  if (!PREVIEW) {
-    const session = await auth().catch(() => null);
-    if (!session?.user) redirect("/login");
-  }
 
   const fromDate = monthStartIso();
   const toDate = isoDateMinusDays(0);

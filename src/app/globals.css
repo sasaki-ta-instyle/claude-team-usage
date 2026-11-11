@@ -487,14 +487,10 @@ mark {
 }
 
 /* ── Login ────────────────────────────────────────── */
-.login-shell {
-  min-height: 100vh;
+.login-wrap {
   display: flex;
-  align-items: center;
   justify-content: center;
-  padding: 24px;
-  position: relative;
-  z-index: 1;
+  padding: 48px 0;
 }
 .login-card {
   width: 100%;

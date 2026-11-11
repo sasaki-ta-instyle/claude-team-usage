@@ -2,6 +2,7 @@ import Link from "next/link";
 
 import { centsToUsd, formatCost, formatTokens, isoDateMinusDays } from "@/lib/format";
 import { getUserByEmail, memberDailyTrend } from "@/lib/queries";
+import { isAdminViewer } from "@/lib/viewer";
 import { SeatForm } from "./seat-form";
 import { TrendChart, type TrendPoint } from "./trend-chart";
 
@@ -15,6 +16,7 @@ export default async function MemberDetailPage(props: {
 
   const user = await getUserByEmail(email);
   const rows = await memberDailyTrend(email, 30);
+  const isAdmin = await isAdminViewer();
 
   const fromDate = isoDateMinusDays(30);
   const toDate = isoDateMinusDays(0);
@@ -86,7 +88,7 @@ export default async function MemberDetailPage(props: {
           正本は claude.ai 管理画面のメンバー CSV です（<Link href="/members">メンバー</Link> で取り込み）。
           ここでの手動変更は、次回の CSV 取り込みで CSV の値に上書きされます。
         </p>
-        <SeatForm email={email} current={user?.seatType ?? null} />
+        {isAdmin ? <SeatForm email={email} current={user?.seatType ?? null} /> : null}
       </section>
     </>
   );

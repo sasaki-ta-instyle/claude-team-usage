@@ -1,7 +1,10 @@
 import type { Metadata } from "next";
 
-import { auth, signOut } from "@/lib/auth";
+import Link from "next/link";
+
+import { signOut } from "@/lib/auth";
 import { PREVIEW } from "@/lib/preview";
+import { isAdminViewer } from "@/lib/viewer";
 import { AppNav } from "./_nav";
 import { BudouxWrap } from "./_budoux";
 import "./globals.css";
@@ -40,59 +43,57 @@ export default async function RootLayout({
 }: {
   children: React.ReactNode;
 }) {
-  // stale JWT (旧 AUTH_SECRET で署名されたクッキー) を持つ訪問者でも落ちないよう
-  // session 取得に失敗したら未ログイン扱いで続行する。
-  const session = PREVIEW ? null : await auth().catch(() => null);
-  const isLoggedIn = PREVIEW || !!session?.user;
-  const headerName = PREVIEW
-    ? "admin (demo)"
-    : (session?.user?.name ?? "admin");
+  // 閲覧は公開。ヘッダ右側だけ管理者ログイン状態で出し分ける。
+  const isAdmin = await isAdminViewer();
 
   return (
     <html lang="ja">
       <body>
         <BudouxWrap />
         <div className="scene-bg" aria-hidden />
-        {isLoggedIn ? (
-          <div className="app-shell">
-            <header className="app-header">
-              <div className="app-header__brand">
-                {/* eslint-disable-next-line @next/next/no-img-element */}
-                <img
-                  className="app-header__logo"
-                  src={`${ASSETS}/logo.svg`}
-                  alt="INSTYLE GROUP"
-                />
-                <span className="app-header__title">Claude Team Usage</span>
-              </div>
-              <AppNav />
-              <div className="app-header__user">
-                {PREVIEW ? (
-                  <span className="badge badge-warning" title="認証バイパス中（モックデータ）">
-                    PREVIEW
-                  </span>
-                ) : null}
-                <span>{headerName}</span>
+        <div className="app-shell">
+          <header className="app-header">
+            <div className="app-header__brand">
+              {/* eslint-disable-next-line @next/next/no-img-element */}
+              <img
+                className="app-header__logo"
+                src={`${ASSETS}/logo.svg`}
+                alt="INSTYLE GROUP"
+              />
+              <span className="app-header__title">Claude Team Usage</span>
+            </div>
+            <AppNav />
+            <div className="app-header__user">
+              {PREVIEW ? (
+                <span className="badge badge-warning" title="認証バイパス中（モックデータ）">
+                  PREVIEW
+                </span>
+              ) : null}
+              {isAdmin ? (
                 <form
                   action={async () => {
                     "use server";
                     if (PREVIEW) return; // demo mode: no-op
                     // Auth.js v5 は redirectTo を素のサブドメイン直下に解釈する
                     // ので basePath を明示する。
-                    await signOut({ redirectTo: "/claude-team-usage/login" });
+                    await signOut({ redirectTo: "/claude-team-usage/" });
                   }}
+                  className="flex-row"
                 >
+                  <span>管理者</span>
                   <button className="btn" type="submit">
                     サインアウト
                   </button>
                 </form>
-              </div>
-            </header>
-            <main className="app-main">{children}</main>
-          </div>
-        ) : (
-          <div className="login-shell">{children}</div>
-        )}
+              ) : (
+                <Link className="btn" href="/login">
+                  管理者ログイン
+                </Link>
+              )}
+            </div>
+          </header>
+          <main className="app-main">{children}</main>
+        </div>
       </body>
     </html>
   );

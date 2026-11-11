@@ -6,6 +6,7 @@ import {
   rosterMemberSummary,
 } from "@/lib/cowork-queries";
 import { rosterLastSyncedAt } from "@/lib/queries";
+import { isAdminViewer } from "@/lib/viewer";
 import {
   effectiveRangeDays,
   monthlyCostCents,
@@ -54,11 +55,12 @@ export default async function MembersPage(props: {
   const toDate = isoDateMinusDays(0);
   const from = new Date(`${fromDate}T00:00:00Z`);
   const to = new Date();
-  const [members, signals, dataStart, lastSynced] = await Promise.all([
+  const [members, signals, dataStart, lastSynced, isAdmin] = await Promise.all([
     rosterMemberSummary({ from, to }),
     memberActivitySignals({ from, to }),
     eventsDataStart(),
     rosterLastSyncedAt(),
+    isAdminViewer(),
   ]);
   const rangeDays = effectiveRangeDays(from, to, dataStart);
   const dataStartIso = dataStart && dataStart > from ? isoDateJst(dataStart) : null;
@@ -96,7 +98,9 @@ export default async function MembersPage(props: {
         ))}
       </div>
 
-      <RosterUpload lastSyncedAt={lastSynced ? formatJst(lastSynced) : null} />
+      {isAdmin ? (
+        <RosterUpload lastSyncedAt={lastSynced ? formatJst(lastSynced) : null} />
+      ) : null}
 
       <div className="glass-panel">
         {members.length === 0 ? (

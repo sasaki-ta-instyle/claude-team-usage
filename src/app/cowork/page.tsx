@@ -1,5 +1,3 @@
-import { auth } from "@/lib/auth";
-import { redirect } from "next/navigation";
 
 import {
   coworkMemberSummary,
@@ -7,7 +5,6 @@ import {
   coworkRecentEvents,
 } from "@/lib/cowork-queries";
 import { formatCost, formatTokens } from "@/lib/format";
-import { PREVIEW } from "@/lib/preview";
 
 export const dynamic = "force-dynamic";
 
@@ -22,10 +19,6 @@ const EVENT_LABEL: Record<string, string> = {
 export default async function CoworkPage(props: {
   searchParams: Promise<{ days?: string }>;
 }) {
-  if (!PREVIEW) {
-    const session = await auth().catch(() => null);
-    if (!session?.user) redirect("/login");
-  }
   const { days } = await props.searchParams;
   const range = Math.max(1, Math.min(180, Number(days) || 30));
   const to = new Date();
