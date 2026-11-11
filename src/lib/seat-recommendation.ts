@@ -33,6 +33,20 @@ export const DEFAULT_SEAT_POLICY: SeatPolicy = {
 };
 
 export const WORK_HOURS_JST = { startHour: 10, endHour: 18 } as const; // 平日 10:00–17:59
+
+// 制限到達が起きた時間帯。1 日に複数あれば「勤務時間内 > 時間外」の順で代表させる（土日は土日）
+export type RateLimitSlot = "work" | "after" | "weekend";
+export type RateLimitHit = {
+  date: string; // YYYY-MM-DD（JST）
+  dow: string; // 月〜日
+  time: string; // HH:MM（JST）。勤務時間内の到達があればその最初の時刻
+  slot: RateLimitSlot;
+};
+export const RATE_LIMIT_SLOT_META: Record<RateLimitSlot, { label: string; badge: string }> = {
+  work: { label: "勤務内", badge: "badge-warning" },
+  after: { label: "時間外", badge: "badge-default" },
+  weekend: { label: "土日", badge: "badge-accent" },
+};
 export const API_DIRECT_CENTS = 1000; // $10
 
 export const PREMIUM_MONTHLY_USD = 125;

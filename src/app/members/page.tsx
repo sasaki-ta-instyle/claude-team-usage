@@ -5,7 +5,10 @@ import { rosterLastSyncedAt } from "@/lib/queries";
 import { isAdminViewer } from "@/lib/viewer";
 import {
   DEFAULT_SEAT_POLICY,
+  RATE_LIMIT_SLOT_META,
   WORK_HOURS_JST,
+  type RateLimitHit,
+  type RateLimitSlot,
   effectiveRangeDays,
   recommendReason,
   recommendSeat,
@@ -32,6 +35,51 @@ function CostStack({ cents, emphasize = false }: { cents: number; emphasize?: bo
         {formatJpyFromCents(cents)}
       </div>
     </>
+  );
+}
+
+// 制限到達日を「勤務内 / 時間外 / 土日」に分けて見せる。件数チップ＋日付・時刻の一覧。
+const SLOT_ORDER: RateLimitSlot[] = ["work", "after", "weekend"];
+const MAX_LISTED_HITS = 6;
+
+function RateLimitBreakdown({ hits }: { hits: RateLimitHit[] }) {
+  if (hits.length === 0) return null;
+  const counts = SLOT_ORDER.map((slot) => ({
+    slot,
+    n: hits.filter((h) => h.slot === slot).length,
+  })).filter((c) => c.n > 0);
+  const listed = hits.slice(-MAX_LISTED_HITS);
+  return (
+    <div style={{ marginTop: 4, fontWeight: 400, textAlign: "left" }}>
+      <div style={{ display: "flex", gap: 4, flexWrap: "wrap", justifyContent: "flex-end" }}>
+        {counts.map((c) => (
+          <span key={c.slot} className={`badge ${RATE_LIMIT_SLOT_META[c.slot].badge}`}>
+            {RATE_LIMIT_SLOT_META[c.slot].label} {c.n}
+          </span>
+        ))}
+      </div>
+      <ul
+        style={{
+          listStyle: "none",
+          margin: "4px 0 0",
+          padding: 0,
+          fontSize: 11,
+          color: "var(--color-text-muted)",
+          textAlign: "right",
+          whiteSpace: "nowrap",
+        }}
+      >
+        {hits.length > listed.length ? <li>… 他 {hits.length - listed.length} 日</li> : null}
+        {listed.map((h) => (
+          <li key={h.date}>
+            {h.date.slice(5).replace("-", "/")}（{h.dow}）{h.time}{" "}
+            <span style={h.slot === "work" ? { color: "var(--color-warning)", fontWeight: 600 } : undefined}>
+              {RATE_LIMIT_SLOT_META[h.slot].label}
+            </span>
+          </li>
+        ))}
+      </ul>
+    </div>
   );
 }
 
@@ -84,6 +132,8 @@ export default async function MembersPage(props: {
         / それ以外 = Standard 維持（月コストが大きくても上限に当たらなければ Standard で足りる）/
         <strong>月換算 &lt; $10 = API 従量候補</strong> / プロンプト 0 = 未使用。
         制限到達は HTTP 429（レート制限）だけを数える（OAuth 切れ等のエラーは除外）。
+        日ごとに <strong>勤務内</strong>（平日 {WORK_HOURS_JST.startHour}–{WORK_HOURS_JST.endHour} 時に到達）/
+        <strong>時間外</strong>（平日のそれ以外の時間）/ <strong>土日</strong> を表示し、時刻はその日の最初の到達（勤務内があればその時刻）。
         副バッジで <strong>高稼働</strong>（≥ {HIGH_ACTIVITY_DAYS} 日アクティブ）を表示。
         <strong>現状 tier</strong> と推奨がズレている場合は「⬇ 過剰投資」（Premium 割当だが推奨は下位）／
         「⬆ 過小投資」（Standard 割当だが推奨 Premium）バッジで警告する。
@@ -171,6 +221,7 @@ export default async function MembersPage(props: {
                         style={isCapped ? { color: "var(--color-warning)", fontWeight: 600 } : undefined}
                       >
                         {m.rateLimitDays}
+                        <RateLimitBreakdown hits={m.rateLimitHits} />
                       </td>
                       <td className="num">
                         {formatUsd(sig.maxPeakCents)}

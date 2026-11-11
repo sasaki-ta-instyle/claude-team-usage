@@ -4,7 +4,11 @@ import { db, schema } from "@/db/client";
 import { HIDDEN_EMAILS_LOWER } from "@/lib/hidden-emails";
 import { PREVIEW } from "@/lib/preview";
 import { usersRoster } from "@/lib/queries";
-import { WORK_HOURS_JST } from "@/lib/seat-recommendation";
+import {
+  WORK_HOURS_JST,
+  type RateLimitHit,
+  type RateLimitSlot,
+} from "@/lib/seat-recommendation";
 import {
   COWORK_MOCK_MEMBERS,
   mockCoworkOverall,
@@ -365,8 +369,8 @@ export async function eventsDataStart(): Promise<Date | null> {
 
 // ─── 稼働・上限シグナル（seat 推奨の判定材料） ─────────────────────
 // - activeDays / maxDayCostCents: 日次（JST）の稼働日数と最大日コスト
-// - rateLimitDays: 制限到達（api_error かつ HTTP 429）があった JST 日数。
-//   OAuth 切れ・バージョン不一致・通信断などの api_error は数えない
+// - rateLimitDays / rateLimitHits: 制限到達（api_error かつ HTTP 429）があった JST 日と、
+//   その日が勤務時間内 / 時間外 / 土日のどれか。OAuth 切れ・バージョン不一致・通信断などの api_error は数えない
 // - workPeaksCents: 勤務時間（平日 10–18 時 JST）の各日について、
 //   「その時点の直前 5 時間の利用額」の最大値（Standard / Premium の上限は 5h ローリング窓）
 
@@ -374,6 +378,7 @@ export type MemberSeatSignals = {
   activeDays: number;
   maxDayCostCents: number;
   rateLimitDays: number;
+  rateLimitHits: RateLimitHit[];
   workPeaksCents: number[];
 };
 
@@ -381,6 +386,7 @@ const EMPTY_SIGNALS: MemberSeatSignals = {
   activeDays: 0,
   maxDayCostCents: 0,
   rateLimitDays: 0,
+  rateLimitHits: [],
   workPeaksCents: [],
 };
 
@@ -397,6 +403,13 @@ export async function memberSeatSignals(opts: {
         activeDays,
         maxDayCostCents: Math.round(perDay * 1.6),
         rateLimitDays: m.apiErrorCount >= 2 ? m.apiErrorCount : 0,
+        rateLimitHits: (
+          [
+            { date: "2026-06-01", dow: "月", time: "18:42", slot: "after" },
+            { date: "2026-06-03", dow: "水", time: "14:05", slot: "work" },
+            { date: "2026-06-06", dow: "土", time: "11:20", slot: "weekend" },
+          ] satisfies RateLimitHit[]
+        ).slice(0, m.apiErrorCount >= 2 ? m.apiErrorCount : 0),
         workPeaksCents: Array.from({ length: Math.min(activeDays, 20) }, (_, i) =>
           Math.round(perDay * (0.4 + ((i * 37) % 10) / 10))
         ),
@@ -441,15 +454,34 @@ export async function memberSeatSignals(opts: {
         and extract(hour from jt) >= ${startHour} and extract(hour from jt) < ${endHour}
       group by 1, 2
     ),
-    hits as (
-      select u, count(distinct jt::date) as hit_days from ev
+    hit_days as (
+      select u, jt::date as d,
+             min(jt) as first_jt,
+             min(jt) filter (where extract(isodow from jt) <= 5
+                               and extract(hour from jt) >= ${startHour}
+                               and extract(hour from jt) < ${endHour}) as first_work_jt
+      from ev
       where event_name = 'api_error' and status_code = 429
-      group by 1
+      group by 1, 2
+    ),
+    hits as (
+      select u,
+             count(*) as hit_days,
+             json_agg(json_build_object(
+               'date', to_char(d, 'YYYY-MM-DD'),
+               'dow', extract(isodow from d)::int,
+               'time', to_char(coalesce(first_work_jt, first_jt), 'HH24:MI'),
+               'slot', case when extract(isodow from d) >= 6 then 'weekend'
+                            when first_work_jt is not null then 'work'
+                            else 'after' end
+             ) order by d) as hit_list
+      from hit_days group by 1
     )
     select d.u as email,
            count(*)::int as active_days,
            coalesce(max(d.day_cents), 0)::bigint as max_day_cents,
            coalesce((select hit_days from hits h where h.u = d.u), 0)::int as rate_limit_days,
+           (select hit_list from hits h where h.u = d.u) as rate_limit_hits,
            coalesce((select array_agg(peak::bigint order by wp.d) from work_peak wp where wp.u = d.u), '{}') as work_peaks
     from daily d
     group by d.u
@@ -461,10 +493,28 @@ export async function memberSeatSignals(opts: {
       activeDays: Number(r.active_days ?? 0),
       maxDayCostCents: Number(r.max_day_cents ?? 0),
       rateLimitDays: Number(r.rate_limit_days ?? 0),
+      rateLimitHits: parseHits(r.rate_limit_hits),
       workPeaksCents: ((r.work_peaks as Array<string | number> | null) ?? []).map(Number),
     });
   }
   return out;
+}
+
+const DOW_JA = ["", "月", "火", "水", "木", "金", "土", "日"]; // isodow 1–7
+const SLOTS: ReadonlySet<string> = new Set<RateLimitSlot>(["work", "after", "weekend"]);
+
+function parseHits(v: unknown): RateLimitHit[] {
+  if (!Array.isArray(v)) return [];
+  return v.map((h: Record<string, unknown>) => {
+    const slot = String(h.slot);
+    if (!SLOTS.has(slot)) throw new Error(`unknown rate-limit slot: ${slot}`);
+    return {
+      date: String(h.date),
+      dow: DOW_JA[Number(h.dow)] ?? "?",
+      time: String(h.time),
+      slot: slot as RateLimitSlot,
+    };
+  });
 }
 
 export async function coworkRecentEvents(opts: {
