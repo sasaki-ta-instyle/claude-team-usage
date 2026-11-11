@@ -7,6 +7,7 @@ import {
   VIEWER_COOKIE,
   VIEWER_COOKIE_MAX_AGE,
   configuredPin,
+  safeFrom,
   safeEqual,
   viewerToken,
 } from "@/lib/viewer-pass";
@@ -41,11 +42,6 @@ function recordFailure(ip: string, now: number) {
   const f = failures.get(ip);
   if (!f || now - f.first > WINDOW_MS) failures.set(ip, { count: 1, first: now });
   else f.count++;
-}
-
-// オープンリダイレクト防止: basePath 内の相対パスだけ許可
-function safeFrom(from: string): string {
-  return from.startsWith("/") && !from.startsWith("//") && !from.includes("\\") ? from : "/";
 }
 
 export async function unlock(_prev: UnlockState, formData: FormData): Promise<UnlockState> {

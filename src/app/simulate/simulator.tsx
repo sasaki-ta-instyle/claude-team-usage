@@ -5,11 +5,10 @@ import { useMemo, useState } from "react";
 import { formatTokens } from "@/lib/format";
 import {
   DEFAULT_SEAT_POLICY,
-  PREMIUM_MONTHLY_USD,
-  STANDARD_MONTHLY_USD,
   SEAT_RECO_META,
   recommendReason,
   recommendSeat,
+  currentSeatMonthlyUsd,
   seatMonthlyUsd,
   seatSignals,
   type RateLimitHit,
@@ -84,13 +83,8 @@ export function Simulator({
       // API 従量候補を集計外にしない場合は Standard として数える
       if (!treatApiDirectAsZero && reco === "api_direct_candidate") reco = "standard";
       const reason = recommendReason(reco, seatSignals(input, rangeDays, policy), policy);
-      const planCost = seatMonthlyUsd(reco);
-      const currentCost =
-        m.seatType === "premium"
-          ? PREMIUM_MONTHLY_USD
-          : m.seatType === "standard"
-            ? STANDARD_MONTHLY_USD
-            : 0;
+      const planCost = seatMonthlyUsd(reco, m.seatType);
+      const currentCost = currentSeatMonthlyUsd(m.seatType);
       return { ...m, reco, reason, planCost, currentCost, deltaUsd: planCost - currentCost };
     });
 
@@ -258,12 +252,12 @@ export function Simulator({
           <p className="kpi-sub">@ $25/月</p>
         </div>
         <div className="card">
-          <p className="kpi-label">シート外（API直/未使用）</p>
+          <p className="kpi-label">API 直 / 利用未観測</p>
           <p className="kpi-value">
             {computed.apiDirectCount + computed.unusedCount}
           </p>
           <p className="kpi-sub">
-            API 直 {computed.apiDirectCount} / 未使用 {computed.unusedCount}
+            API 直 {computed.apiDirectCount}（$0 で試算）/ 未観測 {computed.unusedCount}（現状の席代のまま）
           </p>
         </div>
       </section>

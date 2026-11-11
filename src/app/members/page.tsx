@@ -20,7 +20,8 @@ import { RosterUpload } from "./roster-upload";
 import {
   formatJpyFromCents,
   formatUsd,
-  isoDateMinusDays,
+  isoDateJst,
+  trailingDays,
 } from "@/lib/format";
 
 // コスト列は狭いので $X / ¥Y を 2 段に組む。強調は totalCost のみ。
@@ -100,10 +101,7 @@ export default async function MembersPage(props: {
 }) {
   const { days } = await props.searchParams;
   const range = Math.max(1, Math.min(180, Number(days) || SEAT_REVIEW_DAYS));
-  const fromDate = isoDateMinusDays(range);
-  const toDate = isoDateMinusDays(0);
-  const from = new Date(`${fromDate}T00:00:00Z`);
-  const to = new Date();
+  const { from, to, fromLabel: fromDate, toLabel: toDate } = trailingDays(range);
   const [members, dataStart, lastSynced, isAdmin] = await Promise.all([
     rosterMemberSummary({ from, to }),
     eventsDataStart(),
@@ -132,7 +130,7 @@ export default async function MembersPage(props: {
         </strong>{" "}
         / それ以外 = Standard 維持（月コストが大きくても上限に当たらなければ Standard で足りる）。
         <strong>土日・時間外の利用と制限到達は Premium 判定に換算しない</strong>（合計コストの下の（勤務内 $X）が判定に使う分）/
-        <strong>月換算 &lt; $10 = API 従量候補</strong> / プロンプト 0 = 未使用。
+        <strong>月換算 &lt; $10 = API 従量候補</strong> / Cowork・Code の利用 0 = 利用未観測（claude.ai の Chat は計測できないので停止前に本人確認）。
         制限到達は HTTP 429（レート制限）だけを数える（OAuth 切れ等のエラーは除外）。
         日ごとに <strong>勤務内</strong>（平日 {WORK_HOURS_JST.startHour}–{WORK_HOURS_JST.endHour} 時に到達）/
         <strong>時間外</strong>（平日のそれ以外の時間）/ <strong>土日</strong> を表示し、時刻はその日の最初の到達（勤務内があればその時刻）。
@@ -310,9 +308,6 @@ export default async function MembersPage(props: {
   );
 }
 
-function isoDateJst(d: Date): string {
-  return new Date(d.getTime() + 9 * 60 * 60 * 1000).toISOString().slice(0, 10);
-}
 
 function formatJst(d: Date): string {
   return d.toLocaleString("ja-JP", { timeZone: "Asia/Tokyo" });

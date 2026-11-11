@@ -45,3 +45,15 @@ export function monthStartIso(base = new Date()): string {
   const d = new Date(Date.UTC(base.getUTCFullYear(), base.getUTCMonth(), 1));
   return d.toISOString().slice(0, 10);
 }
+
+// 「直近 N 日」= 今から N×24 時間前〜今（日付で切り捨てない。切り捨てると時刻によって
+// 30.0〜30.99 日に揺れ、日数の月換算が閾値をまたいで推奨が変わる）。表示用の日付は JST。
+export function trailingDays(days: number, now = new Date()) {
+  const to = now;
+  const from = new Date(now.getTime() - days * 24 * 60 * 60 * 1000);
+  return { from, to, fromLabel: isoDateJst(from), toLabel: isoDateJst(to) };
+}
+
+export function isoDateJst(d: Date): string {
+  return new Date(d.getTime() + 9 * 60 * 60 * 1000).toISOString().slice(0, 10);
+}

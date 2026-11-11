@@ -10,7 +10,6 @@ import {
   fetchWorkspaces,
   type CodeUsageRow,
   type MessagesUsageRow,
-  type OrganizationUser,
 } from "@/lib/anthropic-admin";
 import { isoDateMinusDays } from "@/lib/format";
 import { PREVIEW } from "@/lib/preview";
@@ -208,36 +207,27 @@ async function syncWorkspaces(): Promise<number> {
   return rows;
 }
 
+// Admin API のユーザー一覧は名前の補完だけに使う。seat tier とロスター在籍の正本は
+// claude.ai 管理画面のメンバー CSV（src/lib/roster-import.ts）なので、ここでは seat_type /
+// in_roster を書かない（Team プランの API は admin 数名分しか返さず、CSV 取り込み結果を上書きしてしまう）。
 async function syncUsers(): Promise<number> {
   let rows = 0;
   for await (const u of fetchUsers()) {
     const email = u.email?.toLowerCase();
     if (!email) continue;
-    const seatType =
-      u.seat_type === "claude_team_premium"
-        ? "premium"
-        : u.seat_type === "claude_team_standard"
-          ? "standard"
-          : null;
-
-    // Upsert by email. If the user already exists we only overwrite seat_type
-    // when the API actually returned one (so manually-set tags are kept).
     const existing = await db.query.users.findFirst({
-      where: (t, { eq }) => eq(t.email, email),
+      where: (t, { sql: s }) => s`lower(${t.email}) = ${email}`,
     });
     if (existing) {
-      const patch: Record<string, unknown> = { name: u.name ?? existing.name };
-      if (seatType) patch.seatType = seatType;
-      await db
-        .update(schema.users)
-        .set(patch)
-        .where(sql`${schema.users.email} = ${email}`);
+      if (u.name && !existing.name) {
+        await db
+          .update(schema.users)
+          .set({ name: u.name })
+          .where(sql`lower(${schema.users.email}) = ${email}`);
+      }
     } else {
-      await db.insert(schema.users).values({
-        email,
-        name: u.name ?? null,
-        seatType,
-      });
+      // ロスター外として記録（CSV 取り込みで在籍・tier が決まる）
+      await db.insert(schema.users).values({ email, name: u.name ?? null });
     }
     rows++;
   }

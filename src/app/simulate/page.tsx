@@ -1,4 +1,4 @@
-import { jpyPerUsd, isoDateMinusDays } from "@/lib/format";
+import { jpyPerUsd, trailingDays } from "@/lib/format";
 import { eventsDataStart, rosterMemberSummary } from "@/lib/cowork-queries";
 import { SEAT_REVIEW_DAYS, effectiveRangeDays } from "@/lib/seat-recommendation";
 import { Simulator } from "./simulator";
@@ -6,10 +6,7 @@ import { Simulator } from "./simulator";
 export const dynamic = "force-dynamic";
 
 export default async function SimulatePage() {
-  const fromDate = isoDateMinusDays(SEAT_REVIEW_DAYS);
-  const toDate = isoDateMinusDays(0);
-  const from = new Date(`${fromDate}T00:00:00Z`);
-  const to = new Date();
+  const { from, to, fromLabel: fromDate, toLabel: toDate } = trailingDays(SEAT_REVIEW_DAYS);
   const [rows, dataStart] = await Promise.all([
     rosterMemberSummary({ from, to }),
     eventsDataStart(),

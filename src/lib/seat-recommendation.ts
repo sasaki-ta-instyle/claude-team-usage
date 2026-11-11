@@ -10,7 +10,8 @@
 //                            PEAK_DAYS 日以上
 //                            （PEAK_CAP は Standard が実際に 429 になった直前 5h 利用額 ≈ $30–48 から置いた目安）
 //   api_direct_candidate … 月換算コスト < $10（Standard $25 を割る軽利用）
-//   unused               … コスト 0 かつプロンプト 0
+//   unused               … Cowork / Code のコスト 0 かつプロンプト 0（= 利用未観測）。
+//                          claude.ai の Chat 利用は計測できないので「使っていない」とは断定しない
 //   standard             … それ以外（月コストが大きくても上限に当たっていなければ Standard で足りる）
 //
 // 日数は「月あたり」に揃える。期間が 1 ヶ月より長い（90 日など）ときは月平均に縮めるが、
@@ -65,7 +66,7 @@ export const SEAT_RECO_META: Record<
   premium: { label: "Premium 推奨", badge: "badge-success" },
   standard: { label: "Standard 維持", badge: "badge-info" },
   api_direct_candidate: { label: "API 従量候補", badge: "badge-warning" },
-  unused: { label: "未使用（停止検討）", badge: "badge-default" },
+  unused: { label: "利用未観測（Chat は計測外）", badge: "badge-default" },
 };
 
 export type SeatRecoInput = {
@@ -148,7 +149,7 @@ export function recommendReason(
   const peakLabel = `勤務時間 5h ${usd(policy.peakCapCents)}+`;
   switch (reco) {
     case "unused":
-      return "プロンプト 0";
+      return "Cowork / Code の利用 0。Chat 利用は本人に確認";
     case "api_direct_candidate":
       return `月換算 ${usd(s.monthlyCostCents)}（< ${usd(API_DIRECT_CENTS)}）`;
     case "premium":
@@ -161,16 +162,22 @@ function fmtDays(v: number): string {
   return Number.isInteger(v) ? String(v) : v.toFixed(1);
 }
 
-// シート単価（月額 USD）。api_direct_candidate と unused は 0 を返して
-// 「シート 1 つ削減して API 従量契約 / 停止に切り出した」想定で集計する。
-export function seatMonthlyUsd(reco: SeatRecommendation): number {
+export function currentSeatMonthlyUsd(seat: string | null): number {
+  return seat === "premium" ? PREMIUM_MONTHLY_USD : seat === "standard" ? STANDARD_MONTHLY_USD : 0;
+}
+
+// 判定後のシート単価（月額 USD）。api_direct_candidate は 0（API 従量に切り出す想定）。
+// unused（利用未観測）は Chat だけ使っている可能性があるので、確認が取れるまで現状の席代を据え置く
+// （観測できない利用を「削減できる費用」として数えない）。
+export function seatMonthlyUsd(reco: SeatRecommendation, currentSeat: string | null): number {
   switch (reco) {
     case "premium":
       return PREMIUM_MONTHLY_USD;
     case "standard":
       return STANDARD_MONTHLY_USD;
     case "api_direct_candidate":
-    case "unused":
       return 0;
+    case "unused":
+      return currentSeatMonthlyUsd(currentSeat);
   }
 }

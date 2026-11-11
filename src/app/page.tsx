@@ -15,6 +15,7 @@ import {
   formatTokens,
   isoDateMinusDays,
   monthStartIso,
+  trailingDays,
 } from "@/lib/format";
 
 export const dynamic = "force-dynamic";
@@ -27,8 +28,7 @@ export default async function DashboardPage() {
   const to = new Date();
 
   // コスト KPI は当月、seat 推奨と上位メンバーは直近 30 日（月初でも判定材料が揃うように）
-  const reviewFromDate = isoDateMinusDays(SEAT_REVIEW_DAYS);
-  const reviewFrom = new Date(`${reviewFromDate}T00:00:00Z`);
+  const { from: reviewFrom, fromLabel: reviewFromDate } = trailingDays(SEAT_REVIEW_DAYS, to);
   const [overall, rosterRows, dataStart] = await Promise.all([
     combinedOverall({ from, to }),
     rosterMemberSummary({ from: reviewFrom, to }),
@@ -46,7 +46,7 @@ export default async function DashboardPage() {
     api_direct_candidate: 0,
     unused: 0,
   };
-  // 推奨 seat の内訳はロスター（シート保有者）が母集団。直近 30 日イベント 0 の人は未使用に入る。
+  // 推奨 seat の内訳はロスター（シート保有者）が母集団。直近 30 日イベント 0 の人は利用未観測に入る。
   for (const m of rosterRows) {
     if (m.inRoster) recoCounts[recommendSeat(m, rangeDays)]++;
   }
@@ -99,9 +99,9 @@ export default async function DashboardPage() {
           <p className="kpi-sub">月換算 &lt; $10（pay-as-you-go の方が安い）</p>
         </div>
         <div className="card">
-          <p className="kpi-label">未使用</p>
+          <p className="kpi-label">利用未観測</p>
           <p className="kpi-value">{recoCounts.unused}</p>
-          <p className="kpi-sub">プロンプト 0（シート停止検討）</p>
+          <p className="kpi-sub">Cowork・Code 利用 0（Chat は計測外。停止前に本人確認）</p>
         </div>
       </section>
 

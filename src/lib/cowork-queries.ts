@@ -62,7 +62,8 @@ export async function coworkMemberSummary(opts: {
 
   const rows = await db
     .select({
-      email: schema.coworkEvents.userEmail,
+      // OTel 受信側は email を正規化しないので、集計キーは小文字に寄せる（大小文字違いの二重計上防止）
+      email: sql<string | null>`lower(${schema.coworkEvents.userEmail})`,
       promptCount: sql<number>`coalesce(sum(case when ${schema.coworkEvents.eventName} = 'user_prompt' then 1 else 0 end), 0)`,
       apiRequestCount: sql<number>`coalesce(sum(case when ${schema.coworkEvents.eventName} = 'api_request' then 1 else 0 end), 0)`,
       apiErrorCount: sql<number>`coalesce(sum(case when ${schema.coworkEvents.eventName} = 'api_error' then 1 else 0 end), 0)`,
@@ -84,7 +85,7 @@ export async function coworkMemberSummary(opts: {
         serviceFilter(service)
       )
     )
-    .groupBy(schema.coworkEvents.userEmail);
+    .groupBy(sql`lower(${schema.coworkEvents.userEmail})`);
 
   return rows
     .filter((r): r is typeof r & { email: string } => !!r.email)
@@ -195,7 +196,8 @@ export async function combinedMemberSummary(opts: {
 
   const rows = await db
     .select({
-      email: schema.coworkEvents.userEmail,
+      // OTel 受信側は email を正規化しないので、集計キーは小文字に寄せる（大小文字違いの二重計上防止）
+      email: sql<string | null>`lower(${schema.coworkEvents.userEmail})`,
       coworkCost: sql<number>`coalesce(sum(case when ${SVC_COWORK} then ${schema.coworkEvents.costUsdCents} else 0 end), 0)`,
       codeCost: sql<number>`coalesce(sum(case when ${SVC_CODE} then ${schema.coworkEvents.costUsdCents} else 0 end), 0)`,
       coworkPrompts: sql<number>`coalesce(sum(case when ${SVC_COWORK} and ${schema.coworkEvents.eventName} = 'user_prompt' then 1 else 0 end), 0)`,
@@ -215,7 +217,7 @@ export async function combinedMemberSummary(opts: {
         SVC_ANY
       )
     )
-    .groupBy(schema.coworkEvents.userEmail);
+    .groupBy(sql`lower(${schema.coworkEvents.userEmail})`);
 
   return rows
     .filter((r): r is typeof r & { email: string } => !!r.email)
@@ -292,7 +294,7 @@ export async function combinedOverall(opts: { from?: Date; to?: Date }) {
 
 // ─── ロスター基準のメンバー集計（/, /members, /simulate, 月次レポート共通） ───
 // events 集計（combinedMemberSummary）に組織ロスターを外側結合する。
-// - ロスター在籍でイベント 0 件の人も 0 値で出す（→ 推奨は「未使用」）
+// - ロスター在籍でイベント 0 件の人も 0 値で出す（→ 推奨は「利用未観測」）
 // - ロスター外だが使用実績のある email も消さずに inRoster=false で残す
 
 export type RosterMemberRow = CombinedMemberRow &

@@ -90,7 +90,7 @@ export async function GET(
     api_direct_candidate: 0,
     unused: 0,
   };
-  // 母集団はロスター（シート保有者）。当月利用 0 の人は未使用に入る。
+  // 母集団はロスター（シート保有者）。当月利用 0 の人は利用未観測に入る。
   for (const m of rosterRows) {
     if (m.inRoster) recoCounts[recommendSeat(m, rangeDays)]++;
   }
@@ -181,9 +181,9 @@ export async function GET(
         <p class="kpi-sub">月換算 &lt; $10</p>
       </div>
       <div class="card">
-        <p class="kpi-label">未使用</p>
+        <p class="kpi-label">利用未観測</p>
         <p class="kpi-value">${recoCounts.unused}</p>
-        <p class="kpi-sub">プロンプト 0（レポート生成時点の roster と突合）</p>
+        <p class="kpi-sub">Cowork・Code 利用 0（Chat は計測外）</p>
       </div>
     </section>
 

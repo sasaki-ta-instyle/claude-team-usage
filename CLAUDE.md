@@ -103,7 +103,7 @@ pm2 reload app-claude-team-usage --update-env
 
 instyle group が契約する **Claude Team プラン**の使用量を可視化し、Premium ($125/seat) / Standard ($25/seat) の配分判断を支える管理ダッシュボード。
 
-**閲覧は暗証番号（PIN）で入れる**。`/unlock` で env `VIEWER_PIN`（数字 4〜8 桁）を入れると 30 日有効の cookie（`HMAC(AUTH_SECRET, PIN)`）が付き、middleware が通す。PIN を変えると全員の cookie が無効になる。総当たり対策として IP ごとに 10 分 5 回失敗でロック。`VIEWER_PIN` 未設定なら管理者以外は入れない（fail-closed）。メンバー email と個人別コストが載るため検索エンジンにも載せない（robots meta ＋全レスポンスに `X-Robots-Tag`）。書き込み（ロスター CSV 取り込み / tier 編集）だけ管理者の共通パスワードログインが必要で、`isAdminViewer()`（`src/lib/viewer.ts`）で UI を出し分け、各 server action 側でも isAdmin を検査する。管理者ログイン済みなら PIN なしで閲覧できる。API（`/api/sync` / `/api/report` / `/api/roster`）は Bearer、`/api/otel` は Basic で個別に守る。
+**閲覧は暗証番号（PIN）で入れる**。`/unlock` で env `VIEWER_PIN`（数字 4〜8 桁）を入れると 30 日有効の cookie（`<失効時刻>.<HMAC(AUTH_SECRET, PIN + 失効時刻)>`、失効時刻はサーバ側でも検証）が付き、middleware が通す。middleware の matcher は basePath 直下（`/claude-team-usage`）も明示的に対象にしている。PIN を変えると全員の cookie が無効になる。総当たり対策として IP ごとに 10 分 5 回失敗でロック。`VIEWER_PIN` 未設定なら管理者以外は入れない（fail-closed）。メンバー email と個人別コストが載るため検索エンジンにも載せない（robots meta ＋全レスポンスに `X-Robots-Tag`）。書き込み（ロスター CSV 取り込み / tier 編集）だけ管理者の共通パスワードログインが必要で、`isAdminViewer()`（`src/lib/viewer.ts`）で UI を出し分け、各 server action 側でも isAdmin を検査する。管理者ログイン済みなら PIN なしで閲覧できる。API（`/api/sync` / `/api/report` / `/api/roster`）は Bearer、`/api/otel` は Basic で個別に守る。
 
 PIN の変更（値を画面に出さない）:
 ```bash
@@ -147,6 +147,8 @@ ssh conoha-deploy 'f=/var/www/_shared/apps/app-claude-team-usage.env; sed -i "s/
 
 - **正本は claude.ai 管理画面 → メンバー の CSV エクスポート**（`Name, Email, Role, Status, Seat Tier`）。Admin API は Team プランだと admin 2 名分しか返らないため、tier の正本にしない
 - 取り込み: `/members` 上部のフォーム（admin）または `POST /api/roster`。実装は `src/lib/roster-import.ts` 1 本
+- Admin API の users 同期（`/api/sync?source=users`）は名前の補完だけで、`seat_type` / `in_roster` は書かない
+- 同時取り込みは `pg_advisory_xact_lock` で直列化。email は小文字で照合・集計する（OTel 側の大小文字違いも `lower()` で寄せる）
 - 反映ルール: CSV にいる人 → `user.in_roster=true`・`seat_type` を CSV 通り（Unassigned は null）・`name`/`roster_role` 更新。CSV に無い既存行 → `in_roster=false`・`seat_type=null`（行は消さない）
 - fail-closed: 必須列欠落 / 未知の Seat Tier / Email 重複・不正 / 0 件 CSV は全体を拒否し DB を変更しない。成否は `sync_log`（source=`roster`）に残る
 - 集計の母集団: `rosterMemberSummary`（`src/lib/cowork-queries.ts`）が OTel 集計にロスターを外側結合する。`/`・`/members`・`/simulate`・月次レポートはすべてこれを使う。非表示 email（`src/lib/hidden-emails.ts`）はロスターからも除外
@@ -160,13 +162,13 @@ Premium と Standard の差は **5 時間ローリング窓の利用上限**。�
 |---|---|
 | Premium 推奨 | 勤務時間内の制限到達 **2 日以上**、または 勤務時間内の利用だけで数えた「直前 5 時間の利用額」が **$40 以上**の日が **4 日以上** |
 | API 従量候補 | 月換算コスト < $10 |
-| 未使用 | コスト 0 かつプロンプト 0 |
+| 利用未観測 | Cowork・Code のコスト 0 かつプロンプト 0。claude.ai の Chat 利用は計測できないので「使っていない」とは断定せず、`/simulate` でも席代を削減扱いしない（現状の席代のまま） |
 | Standard 維持 | それ以外（月コストが大きくても上限に当たっていなければ Standard で足りる） |
 
 - **制限到達** = `api_error` かつ HTTP 429 の JST 日数（`memberSeatSignals`、`src/lib/cowork-queries.ts`）。OAuth 切れ・バージョン不一致・通信断などの api_error は数えない。判定には勤務内の日だけを使う。`/members` では各日を **勤務内**（平日 10–18 時に到達あり）/ **時間外**（平日のそれ以外）/ **土日** に分類し、日付・曜日・最初の到達時刻と一緒に表示する（`RateLimitHit`）
 - **5h ピーク** = 勤務時間（平日 10:00–17:59 JST、祝日は未考慮）の各日について、その時点の直前 5 時間の利用額（API 換算コスト、窓の中も勤務時間内の利用だけ）の最大値。$40 は Standard が実際に 429 になった直前 5 時間の利用額（約 $30–48）から置いた目安
 - **勤務内コスト** = 勤務時間内の利用額。`/members` と `/simulate` の合計コストの下に「（勤務内 $X）」で併記（`workCostCents`）
-- **判定期間** = 直近 30 日（`SEAT_REVIEW_DAYS`）。`/` の推奨内訳と `/simulate` も当月ではなく直近 30 日で判定する（月初は数日分しかなく、日数の基準に届かないため）。`/` のコスト KPI は当月のまま
+- **判定期間** = 直近 30 日（`SEAT_REVIEW_DAYS`、今から 30×24 時間前〜今。日付で切り捨てない）。`/` の推奨内訳と `/simulate` も当月ではなく直近 30 日で判定する（月初は数日分しかなく、日数の基準に届かないため）。`/` のコスト KPI は当月のまま
 - **月あたり換算**: 期間が 1 ヶ月（365.25/12 日）より長いときは日数を月平均に縮める。短い期間（7 日・当月途中）は引き伸ばさない（数日分の 1 回を月 4 回扱いにしない）
 - **月換算コスト**（API 従量候補の判定と表示用）: 合計コスト ÷ 実効日数 × 平均月長。実効日数は期間開始と生イベントの最古時刻（月次運用で古い raw は削除される）の遅い方から数える（`effectiveRangeDays`）
 - 基準値の妥当性は `/simulate` でプリセット（厳しめ / 標準 / 実績のみ）や手入力で比べられる。既定値を変えるときは `DEFAULT_SEAT_POLICY` を 1 か所直す

@@ -28,6 +28,9 @@ export class RosterCsvError extends Error {
   }
 }
 
+// 形式チェックは最小限（local@domain.tld）。"@" 単体などで全員をロスター外にする事故を防ぐ
+const EMAIL_RE = /^[^\s@",]+@[^\s@",]+\.[^\s@",]+$/;
+
 const SEAT_TIER_MAP: ReadonlyMap<string, RosterSeat> = new Map([
   ["premium", "premium"],
   ["standard", "standard"],
@@ -41,6 +44,7 @@ export function parseCsv(text: string): string[][] {
   let row: string[] = [];
   let field = "";
   let inQuotes = false;
+  let closedQuote = false; // 直前で引用符フィールドが閉じた（次は区切りか改行でなければならない）
   for (let i = 0; i < src.length; i++) {
     const c = src[i];
     if (inQuotes) {
@@ -50,14 +54,22 @@ export function parseCsv(text: string): string[][] {
           i++;
         } else {
           inQuotes = false;
+          closedQuote = true;
         }
       } else {
         field += c;
       }
       continue;
     }
-    if (c === '"') inQuotes = true;
-    else if (c === ",") {
+    if (closedQuote && c !== "," && c !== "\n" && c !== "\r") {
+      throw new RosterCsvError([`引用符の位置が不正です（"${field}" の直後に "${c}"）`]);
+    }
+    closedQuote = false;
+    if (c === '"') {
+      // 引用符はフィールド先頭でのみ許可（alice"x"@example.com のような崩れた行を黙って直さない）
+      if (field !== "") throw new RosterCsvError([`引用符の位置が不正です（"${field}" の後）`]);
+      inQuotes = true;
+    } else if (c === ",") {
       row.push(field);
       field = "";
     } else if (c === "\n" || c === "\r") {
@@ -109,7 +121,7 @@ export function parseRosterCsv(text: string): RosterEntry[] {
     const line = idx + 2;
     const email = clean(r[iEmail]).toLowerCase();
     const tierRaw = clean(r[iTier]);
-    if (!email || !email.includes("@")) {
+    if (!EMAIL_RE.test(email)) {
       problems.push(`${line} 行目: Email が不正（"${email}"）`);
       return;
     }
@@ -154,6 +166,9 @@ function toSeat(v: string | null): RosterSeat {
 export async function applyRoster(entries: RosterEntry[]): Promise<RosterImportResult> {
   const now = new Date();
   return db.transaction(async (tx) => {
+    // 取り込み同士を直列化する。並行実行だと互いの追加を「CSV に無い人」として解除できず、
+    // どちらの CSV とも一致しないロスターが残るため（トランザクション終了で自動解放）
+    await tx.execute(sql`select pg_advisory_xact_lock(hashtext('claude-team-usage:roster-import'))`);
     const existing = await tx
       .select({
         email: schema.users.email,
@@ -177,10 +192,12 @@ export async function applyRoster(entries: RosterEntry[]): Promise<RosterImportR
         rosterSyncedAt: now,
         ...(e.name ? { name: e.name } : {}),
       };
-      await tx
-        .insert(schema.users)
-        .values({ email: e.email, ...values })
-        .onConflictDoUpdate({ target: schema.users.email, set: values });
+      if (prev) {
+        // 既存行は小文字比較で更新する（大文字混じりで保存された行に別行を作らない）
+        await tx.update(schema.users).set(values).where(sqlEmailEq(e.email));
+      } else {
+        await tx.insert(schema.users).values({ email: e.email, ...values });
+      }
       if (!prev || !prev.inRoster) added.push(e.email);
       const prevSeat = prev ? toSeat(prev.seatType) : null;
       if (prev && prevSeat !== e.seatType) {
